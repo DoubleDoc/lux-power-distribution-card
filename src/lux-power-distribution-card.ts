@@ -896,7 +896,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
             total_cap_wh = cap_ah * this.getEntityStateInt(this._config.battery.voltage_entities[this._index]);
             // Calculate available wh here, soc is different
           }
-          const dod = this._config.battery.depth_of_discharge ?? 20;
+          const dod = this.getEntityStateInt(this._config.battery.depth_of_discharge[this._index]) ?? 20;  // Read the entity identifed in the config, default 20%
           if (battery_flow < 0) {
             const avail_wh = (total_cap_wh * (battery_soc - dod)) / 100;
             const rem_h = avail_wh / Math.abs(battery_flow);
