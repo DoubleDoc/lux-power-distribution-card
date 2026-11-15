@@ -1253,8 +1253,10 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
             justify-content: center;
           }
           #generator-image img {
+            width: 80%;
+            height: auto;
             max-width: 80%;
-            max-height: 80%;
+            max-height: none;
           }
           /* Battery generator: charge label sits low in its cell, next to the battery */
           .gen-charge-info {
