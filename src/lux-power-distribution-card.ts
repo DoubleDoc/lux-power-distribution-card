@@ -329,6 +329,39 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     return isNaN(value) ? 20 : value;
   }
 
+  // Numeric state of an optional entity, or null when it's missing or not numeric.
+  getOptionalFloat(entity?: string): number | null {
+    if (!entity) return null;
+    const value = parseFloat(this.hass?.states[entity]?.state ?? '');
+    return isNaN(value) ? null : value;
+  }
+
+  //////////////////////////////
+  // Battery generator (charges the batteries directly, not through the inverter)
+  //////////////////////////////
+
+  // It belongs to the whole battery bank, so it's shown (and added to the battery
+  // flow) in the parallel view or when there's a single inverter.
+  getBatteryGenerator() {
+    const gen = this._config?.battery_generator;
+    if (!gen || !(this._index == -1 || this._config!.inverter_count == 1)) return null;
+    const power = this.getOptionalFloat(gen.power_entity) ?? 0;
+    let active: boolean;
+    if (gen.running_entity) {
+      active = this.hass?.states[gen.running_entity]?.state === 'on';
+    } else {
+      active = power > (gen.active_threshold ?? 0);
+    }
+    return {
+      active,
+      power: Math.round(power),
+      voltage: this.getOptionalFloat(gen.voltage_entity),
+      frequency: this.getOptionalFloat(gen.frequency_entity),
+      thd: this.getOptionalFloat(gen.thd_entity),
+      addToBattery: gen.add_to_battery_flow ?? true,
+    };
+  }
+
   getEntityParallelStateInt(entity_list: string[]) {
     let total = 0;
     if (this._config) {
@@ -805,6 +838,32 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
       }
     }
 
+    // ----- Battery generator
+    const gen_configured = Boolean(this._config.battery_generator);
+    const gen = this.getBatteryGenerator();
+    let gen_image: TemplateResult | typeof nothing = nothing;
+    let gen_info: TemplateResult | typeof nothing = nothing;
+    let gen_arrow = ARROW_NONE;
+    if (gen?.active) {
+      gen_arrow = ARROW_DOWN;
+      gen_image = html`<img
+        src=${getBase64Data(base64Images.Generator)}
+        @click=${() => this._openHistory(this._config!.battery_generator!.power_entity)}
+      />`;
+      const ac_parts = [
+        gen.voltage != null ? `${Math.round(gen.voltage)} Vac` : '',
+        gen.frequency != null ? `${gen.frequency.toFixed(1)} Hz` : '',
+      ].filter((x) => x);
+      gen_info = html`
+        <div>
+          <p class="header-text">${gen.power} W</p>
+          <p class="sub-text">Generator</p>
+          ${ac_parts.length ? html`<p class="sub-text">${ac_parts.join(' · ')}</p>` : nothing}
+          ${gen.thd != null ? html`<p class="sub-text">THD ${gen.thd.toFixed(1)}%</p>` : nothing}
+        </div>
+      `;
+    }
+
     // ----- Battery
     let battery_flow_info: TemplateResult | typeof nothing = nothing;
     let battery_image = html`<img src=${getBase64Data(base64Images.Battery5)} />`;
@@ -813,7 +872,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     let battery_bottom_runtime: TemplateResult | typeof nothing = nothing;
     if (this._config.battery) {
       const battery_soc = this.getBatterySoc(this._index);
-      const battery_flow = this.getBatteryFlow(this._index);
+      const battery_flow = this.getBatteryFlow(this._index) + (gen?.active && gen.addToBattery ? gen.power : 0);
       battery_image = html`<img src=${getBatteryImage(battery_soc)} />`;
 
       let header_text = '0 W';
@@ -1050,7 +1109,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
           .diagram-grid {
             display: grid;
             grid-template-columns: repeat(6, 1fr);
-            grid-template-rows: repeat(${this._config.pv ? 5 : 4}, 1fr);
+            grid-template-rows: repeat(${this._config.pv || gen_configured ? 5 : 4}, 1fr);
             padding-left: 5px;
             padding-right: 5px;
           }
@@ -1308,7 +1367,33 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
               <div id="status-cell" class="cell grid-status">${status_code}</div>
             </div>
             <div id="card-grid" class="diagram-grid">
-              ${this._config?.pv && (this._config?.pv?.array_1_entities || this._config?.pv?.combined_entities)
+              ${gen_configured
+                ? html`
+                    <div id="generator-image" class="cell image-cell">${gen_image}</div>
+                    <div id="generator-info" class="cell text-cell">${gen_info}</div>
+                    ${this._config?.pv && (this._config?.pv?.array_1_entities || this._config?.pv?.combined_entities)
+                      ? html`
+                          <div id="solar-image" class="cell image-cell">
+                            <img src=${getBase64Data(base64Images.Solar)} />
+                          </div>
+                          <div id="solar-info" class="cell text-cell">${solar_info}</div>
+                        `
+                      : html`<div class="cell"></div>
+                          <div class="cell"></div>`}
+                    <div class="cell"></div>
+                    <div class="cell"></div>
+                    <div id="generator-arrows" class="cell arrow-cell ${gen_arrow}">${this.generateArrows()}</div>
+                    <div id="battery-charge-info" class="cell text-cell">${battery_flow_info}</div>
+                    ${this._config?.pv && (this._config?.pv?.array_1_entities || this._config?.pv?.combined_entities)
+                      ? html`<div id="solar-arrows" class="cell arrow-cell ${solar_arrow}">${this.generateArrows()}</div>`
+                      : html`<div class="cell"></div>`}
+                    <div id="temp-info" class="cell temp-cell">${temp_info}</div>
+                    <div class="cell temp-cell"></div>
+                    <div class="cell">
+                      ${['right', 'both'].includes(refresh_button_location) ? refresh_button_right : nothing}
+                    </div>
+                  `
+                : this._config?.pv && (this._config?.pv?.array_1_entities || this._config?.pv?.combined_entities)
                 ? html`
                     <div class="cell"></div>
                     <div class="cell"></div>

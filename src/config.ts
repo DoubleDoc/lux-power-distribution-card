@@ -20,6 +20,19 @@ export type BatteryConfig = {
   show_parallel_soc_entity?: string;
 };
 
+// A generator that charges the batteries directly on the DC bus (through its own
+// chargers and the BMSs), not through the inverter. Unlike grid.generator_*,
+// it's drawn beside the battery and the grid stays visible.
+export type BatteryGeneratorConfig = {
+  power_entity: string; // W into the batteries
+  voltage_entity?: string; // Vac
+  frequency_entity?: string; // Hz
+  thd_entity?: string; // %
+  running_entity?: string; // on/off; when set it decides whether the generator is shown
+  active_threshold?: number; // W; without running_entity, shown when power > this (default 0)
+  add_to_battery_flow?: boolean; // add generator power to the battery flow (default true)
+};
+
 export type ParallelConfig = {
   parallel_first?: boolean;
   aliases?: string[];
@@ -87,6 +100,7 @@ export type LuxCardConfig = LovelaceCardConfig & {
   grid: GridConfig;
   consumption: ConsumptionConfig;
   pv?: PvConfig;
+  battery_generator?: BatteryGeneratorConfig;
   temp?: TempConfig;
   update_time?: UpdateTimeConfig;
   status_codes?: StatusCodesConfig;
@@ -133,4 +147,8 @@ export function validateConfig(config: LuxCardConfig) {
   if (!config.grid) throw new Error(`'grid' is a required object.`);
   if (!config.grid.flow_entities) throw new Error(`'flow_entities' is a required list within 'grid'.`);
   validateEntityCount(config.grid.flow_entities, 'grid.flow_entities', config.inverter_count);
+
+  // Battery generator
+  if (config.battery_generator && !config.battery_generator.power_entity)
+    throw new Error(`'power_entity' is required within 'battery_generator'.`);
 }
