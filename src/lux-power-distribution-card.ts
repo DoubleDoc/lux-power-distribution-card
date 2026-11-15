@@ -3,7 +3,7 @@ import { property, customElement, state } from 'lit/decorators.js';
 
 import { HomeAssistant, LovelaceCard, LovelaceCardEditor } from './lib/types';
 
-import { LuxCardConfig, validateConfig } from './config';
+import { LuxCardConfig, normalizeConfig, validateConfig } from './config';
 import {
   CARD_NAME,
   EDITOR_NAME,
@@ -73,8 +73,9 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
   }
 
   setConfig(config: LuxCardConfig): void {
-    validateConfig(config);
-    this._config = config;
+    const normalized = normalizeConfig(config);
+    validateConfig(normalized);
+    this._config = normalized;
     this._updated = false;
   }
 
@@ -1241,10 +1242,10 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
           .arrows-none {
             opacity: 0;
           }
-          /* Vertical feeds (PV -> inverter, inverter -> home): shorter so they don't
-             touch the icons at either end, like the grid feed */
-          #solar-arrows.arrows-down,
-          #home-arrows.arrows-down {
+          /* feed_spacing: vertical feeds (PV -> inverter, inverter -> home) shorter so
+             they don't touch the icons at either end, like the grid feed */
+          .feed-spacing #solar-arrows.arrows-down,
+          .feed-spacing #home-arrows.arrows-down {
             transform: rotate(-90deg) scale(0.8);
           }
           /* Battery generator: feed stops short of the battery like the other feeds */
@@ -1394,7 +1395,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
               <div id="select-cell" class="cell">${parallel_selector}</div>
               <div id="status-cell" class="cell grid-status">${status_code}</div>
             </div>
-            <div id="card-grid" class="diagram-grid">
+            <div id="card-grid" class="diagram-grid ${this._config.feed_spacing ? 'feed-spacing' : ''}">
               ${gen_configured
                 ? html`
                     <div id="generator-image" class="cell image-cell">${gen_image}</div>

@@ -33,6 +33,17 @@ export type BatteryGeneratorConfig = {
   add_to_battery_flow?: boolean; // add generator power to the battery flow (default true)
 };
 
+// One block for either generator wiring. Normalised in normalizeConfig() into the
+// older options, which keep working on their own:
+//   architecture: battery -> battery_generator (DC-coupled, drawn above the battery)
+//   architecture: grid    -> grid.generator_power_entities / generator_voltage_entities
+//                            (generator replaces the grid, the original behaviour)
+export type GeneratorConfig = Partial<BatteryGeneratorConfig> & {
+  architecture: 'battery' | 'grid';
+  power_entities?: string[]; // grid: one per inverter (or use power_entity with one inverter)
+  voltage_entities?: string[]; // grid: one per inverter (or use voltage_entity with one inverter)
+};
+
 export type ParallelConfig = {
   parallel_first?: boolean;
   aliases?: string[];
@@ -101,11 +112,41 @@ export type LuxCardConfig = LovelaceCardConfig & {
   consumption: ConsumptionConfig;
   pv?: PvConfig;
   battery_generator?: BatteryGeneratorConfig;
+  generator?: GeneratorConfig;
+  feed_spacing?: boolean; // leave a gap between the PV/home feeds and their icons (default false)
   temp?: TempConfig;
   update_time?: UpdateTimeConfig;
   status_codes?: StatusCodesConfig;
   title?: string;
 };
+
+export function normalizeConfig(config: LuxCardConfig): LuxCardConfig {
+  const gen = config.generator;
+  if (!gen) return config;
+  if (config.battery_generator || config.grid?.generator_power_entities || config.grid?.generator_voltage_entities)
+    throw new Error(`Use either 'generator' or the older 'battery_generator' / 'grid.generator_*' options, not both.`);
+  const { architecture, power_entities, voltage_entities, ...rest } = gen;
+  if (architecture === 'battery') {
+    if (!rest.power_entity) throw new Error(`'power_entity' is required within 'generator'.`);
+    return { ...config, battery_generator: rest as BatteryGeneratorConfig };
+  }
+  if (architecture === 'grid') {
+    const powers = power_entities ?? (rest.power_entity ? [rest.power_entity] : undefined);
+    if (!powers) throw new Error(`'power_entities' (or 'power_entity') is required within 'generator'.`);
+    validateEntityCount(powers, 'generator.power_entities', config.inverter_count);
+    const volts = voltage_entities ?? (rest.voltage_entity ? [rest.voltage_entity] : undefined);
+    if (volts) validateEntityCount(volts, 'generator.voltage_entities', config.inverter_count);
+    return {
+      ...config,
+      grid: {
+        ...config.grid,
+        generator_power_entities: powers,
+        ...(volts ? { generator_voltage_entities: volts } : {}),
+      },
+    };
+  }
+  throw new Error(`'generator.architecture' must be 'battery' or 'grid'.`);
+}
 
 function validateEntityCount(object_list: string[], object_name: string, inv_count: number) {
   if (object_list.length != inv_count) throw new Error(`'${object_name}' list must be equal to the 'inverter_count'.`);
