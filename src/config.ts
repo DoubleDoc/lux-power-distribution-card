@@ -28,8 +28,8 @@ export type BatteryGeneratorConfig = {
   voltage_entity?: string; // Vac
   frequency_entity?: string; // Hz
   thd_entity?: string; // %
-  running_entity?: string; // on/off; when set it decides whether the generator is shown
-  active_threshold?: number; // W; without running_entity, shown when power > this (default 0)
+  running_entity?: string; // on/off; while on, always shown with all configured readings (zeros too)
+  active_threshold?: number; // W; otherwise shown while power > this (default 0), zero readings hidden
   add_to_battery_flow?: boolean; // add generator power to the battery flow (default true)
 };
 

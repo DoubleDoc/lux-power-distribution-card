@@ -346,19 +346,21 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     const gen = this._config?.battery_generator;
     if (!gen || !(this._index == -1 || this._config!.inverter_count == 1)) return null;
     const power = this.getOptionalFloat(gen.power_entity) ?? 0;
-    let active: boolean;
-    if (gen.running_entity) {
-      active = this.hass?.states[gen.running_entity]?.state === 'on';
-    } else {
-      active = power > (gen.active_threshold ?? 0);
-    }
+    // running_entity on: always shown, with every configured reading (zeros too).
+    // Otherwise (off or not set): shown only while power > active_threshold, and
+    // zero readings are left out.
+    const running = gen.running_entity ? this.hass?.states[gen.running_entity]?.state === 'on' : false;
+    const active = running || power > (gen.active_threshold ?? 0);
+    const reading = (entity?: string) => {
+      const value = this.getOptionalFloat(entity);
+      return running ? value : value || null;
+    };
     return {
       active,
       power: Math.round(power),
-      // Optional readings: zero or missing means "don't show"
-      voltage: this.getOptionalFloat(gen.voltage_entity) || null,
-      frequency: this.getOptionalFloat(gen.frequency_entity) || null,
-      thd: this.getOptionalFloat(gen.thd_entity) || null,
+      voltage: reading(gen.voltage_entity),
+      frequency: reading(gen.frequency_entity),
+      thd: reading(gen.thd_entity),
       addToBattery: gen.add_to_battery_flow ?? true,
     };
   }
