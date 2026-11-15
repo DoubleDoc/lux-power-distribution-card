@@ -355,9 +355,10 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     return {
       active,
       power: Math.round(power),
-      voltage: this.getOptionalFloat(gen.voltage_entity),
-      frequency: this.getOptionalFloat(gen.frequency_entity),
-      thd: this.getOptionalFloat(gen.thd_entity),
+      // Optional readings: zero or missing means "don't show"
+      voltage: this.getOptionalFloat(gen.voltage_entity) || null,
+      frequency: this.getOptionalFloat(gen.frequency_entity) || null,
+      thd: this.getOptionalFloat(gen.thd_entity) || null,
       addToBattery: gen.add_to_battery_flow ?? true,
     };
   }
@@ -850,15 +851,12 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
         src=${getBase64Data(base64Images.Generator)}
         @click=${() => this._openHistory(this._config!.battery_generator!.power_entity)}
       />`;
-      const ac_parts = [
-        gen.voltage != null ? `${Math.round(gen.voltage)} Vac` : '',
-        gen.frequency != null ? `${gen.frequency.toFixed(1)} Hz` : '',
-      ].filter((x) => x);
       gen_info = html`
         <div>
           <p class="header-text">${gen.power} W</p>
           <p class="sub-text">Generator</p>
-          ${ac_parts.length ? html`<p class="sub-text">${ac_parts.join(' · ')}</p>` : nothing}
+          ${gen.voltage != null ? html`<p class="sub-text">${Math.round(gen.voltage)} Vac</p>` : nothing}
+          ${gen.frequency != null ? html`<p class="sub-text">${gen.frequency.toFixed(1)} Hz</p>` : nothing}
           ${gen.thd != null ? html`<p class="sub-text">THD ${gen.thd.toFixed(1)}%</p>` : nothing}
         </div>
       `;
@@ -1240,6 +1238,14 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
           .arrows-none {
             opacity: 0;
           }
+          /* Battery generator: feed stops short of the battery like the other feeds */
+          .gen-arrow-cell.arrows-down {
+            transform: rotate(-90deg) scale(0.8) translateX(12%);
+          }
+          /* Battery generator: charge label sits low in its cell, next to the battery */
+          .gen-charge-info {
+            align-items: flex-end;
+          }
 
           /* ARROW ANIMATIONS CELL*/
           @keyframes arrow-flash {
@@ -1382,8 +1388,8 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
                           <div class="cell"></div>`}
                     <div class="cell"></div>
                     <div class="cell"></div>
-                    <div id="generator-arrows" class="cell arrow-cell ${gen_arrow}">${this.generateArrows()}</div>
-                    <div id="battery-charge-info" class="cell text-cell">${battery_flow_info}</div>
+                    <div id="generator-arrows" class="cell arrow-cell gen-arrow-cell ${gen_arrow}">${this.generateArrows()}</div>
+                    <div id="battery-charge-info" class="cell text-cell gen-charge-info">${battery_flow_info}</div>
                     ${this._config?.pv && (this._config?.pv?.array_1_entities || this._config?.pv?.combined_entities)
                       ? html`<div id="solar-arrows" class="cell arrow-cell ${solar_arrow}">${this.generateArrows()}</div>`
                       : html`<div class="cell"></div>`}
