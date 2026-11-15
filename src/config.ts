@@ -97,6 +97,9 @@ export type StatusCodesConfig = {
   overwrite_as_normal?: number[];
   overwrite_as_warning?: number[];
   overwrite_as_error?: number[];
+  show_operating_mode?: boolean; // name the operating mode (e.g. "PV → Battery + AC") instead of "Normal"
+  fault_entities?: string[]; // fault code (bitmask) entities, any number; non-zero shows as a fault
+  warning_entities?: string[]; // warning code (bitmask) entities, any number; non-zero shows as a warning
 };
 
 export type TempConfig = {

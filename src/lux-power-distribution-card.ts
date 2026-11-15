@@ -15,6 +15,7 @@ import {
   ARROW_RIGHT,
   ARROW_DOWN,
   getStatusMessage,
+  getOperatingMode,
   statusLevels,
   StatusMessageType,
   CARD_FULL_NAME,
@@ -468,7 +469,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
   //////////////////////////////
 
   getStatus(code: number) {
-    let status_dict = getStatusMessage(code);
+    let status_dict = this._config?.status_codes?.show_operating_mode ? getOperatingMode(code) : getStatusMessage(code);
     if (this._config?.status_codes?.overwrite_as_normal) {
       if (this._config?.status_codes?.overwrite_as_normal.includes(code)) {
         status_dict.level = statusLevels.Clear;
@@ -485,6 +486,26 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
       }
     }
     return status_dict;
+  }
+
+  // Fault/warning code entities hold bitmasks. Each set bit n is shown as E0nn
+  // (faults) or W0nn (warnings), the Luxpower numbering, with the raw hex code.
+  getCodeAlerts(): TemplateResult[] {
+    const out: TemplateResult[] = [];
+    const scan = (entities: string[] | undefined, prefix: string, dot: string, label: string) => {
+      (entities ?? []).forEach((entity, i) => {
+        const value = parseInt(this.hass?.states[entity]?.state ?? '');
+        if (isNaN(value) || value <= 0) return;
+        const bits: string[] = [];
+        for (let b = 0; b < 32; b++) if (Math.floor(value / 2 ** b) % 2) bits.push(`${prefix}${String(b).padStart(3, '0')}`);
+        const who = entities!.length > 1 ? ` (${this._config?.parallel?.aliases?.[i] ?? `Inv ${i + 1}`})` : '';
+        const hex = `0x${value.toString(16).toUpperCase().padStart(8, '0')}`;
+        out.push(html`<br />${dot} ${label} ${bits.join(', ')}${who} [${hex}]`);
+      });
+    };
+    scan(this._config?.status_codes?.fault_entities, 'E', '🔴', 'Fault');
+    scan(this._config?.status_codes?.warning_entities, 'W', '🟠', 'Warning');
+    return out;
   }
 
   getStatusMessage(status: StatusMessageType) {
@@ -902,6 +923,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
         battery_flow != 0 &&
         this._config.battery.soc_entities &&
         battery_soc != 100 &&
+        !isNaN(battery_soc) &&
         this._config.battery.runtime_location &&
         ['bottom', 'left', 'both'].includes(this._config.battery.runtime_location)
       ) {
@@ -938,7 +960,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
       }
       battery_soc_info = html`
         <div>
-          <p class="header-text">${battery_soc} %</p>
+          <p class="header-text">${isNaN(battery_soc) ? '—' : battery_soc} %</p>
           <p class="header-text">${this.getBatteryVoltage(this._index)}</p>
           ${battery_top_runtime}
         </div>
@@ -1386,7 +1408,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
           <card-content>
             <div id="taskbar-grid" class="status-grid">
               <div id="select-cell" class="cell">${parallel_selector}</div>
-              <div id="status-cell" class="cell grid-status">${status_code}</div>
+              <div id="status-cell" class="cell grid-status">${status_code}${this.getCodeAlerts()}</div>
             </div>
             <div id="card-grid" class="diagram-grid ${this._config.feed_spacing ? 'feed-spacing' : ''}">
               ${gen_configured
