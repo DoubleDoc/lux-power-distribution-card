@@ -1245,6 +1245,11 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
           .gen-arrow-cell.arrows-down {
             transform: rotate(-90deg) scale(0.8) translateX(12%);
           }
+          /* Battery generator: icon at 80% of the cell */
+          #generator-image img {
+            max-width: 80%;
+            max-height: 80%;
+          }
           /* Battery generator: charge label sits low in its cell, next to the battery */
           .gen-charge-info {
             align-items: flex-end;
