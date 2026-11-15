@@ -312,6 +312,23 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     return parseInt(stateObj);
   }
 
+  // depth_of_discharge: a number (20), an entity id ("number.x"), or a list of
+  // entity ids, one per inverter (the parallel view uses the first). Falls back
+  // to 20% when the value or the entity's state isn't a number.
+  getDepthOfDischarge(): number {
+    const cfg = this._config?.battery.depth_of_discharge;
+    let value: number = NaN;
+    if (typeof cfg === 'number') {
+      value = cfg;
+    } else if (typeof cfg === 'string') {
+      value = isNaN(Number(cfg)) ? parseFloat(this.hass?.states[cfg]?.state ?? '') : Number(cfg);
+    } else if (Array.isArray(cfg) && cfg.length > 0) {
+      const entity = cfg[Math.min(Math.max(this._index, 0), cfg.length - 1)];
+      value = parseFloat(this.hass?.states[entity]?.state ?? '');
+    }
+    return isNaN(value) ? 20 : value;
+  }
+
   getEntityParallelStateInt(entity_list: string[]) {
     let total = 0;
     if (this._config) {
@@ -837,7 +854,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
           const cap_ah = this.getEntityStateInt(this._config.battery.capacity_ah_entities[this._index]);
           total_cap_wh = cap_ah * this.getEntityStateInt(this._config.battery.voltage_entities[this._index]);
         }
-        const dod = this._config.battery.depth_of_discharge ?? 20;
+        const dod = this.getDepthOfDischarge();
         if (battery_flow < 0) {
           const avail_wh = (total_cap_wh * (battery_soc - dod)) / 100;
           const rem_h = avail_wh / Math.abs(battery_flow);
