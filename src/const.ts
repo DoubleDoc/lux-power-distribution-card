@@ -85,21 +85,23 @@ export function getBase64Data(image_name: base64Images) {
 }
 
 // Operating-mode names for status_codes.show_operating_mode, from the Luxpower
-// register docs (Table 9) as used by the eg4_web_monitor integration. "AC" is the
-// inverter's AC side (loads and/or grid), so "→ AC" doesn't by itself mean export.
+// register docs (Table 9) as used by the eg4_web_monitor integration, reworded:
+// the docs' "→ Grid" is the inverter's AC output, which feeds the loads first and
+// exports only any surplus, so it's shown as "→ Load". AC charging (32, 40) is
+// shown as charging from the grid.
 // The level comes from getStatusMessage so warnings/errors stay as before.
 const OPERATING_MODES: { [code: number]: string } = {
   0: 'Standby',
   1: 'Fault',
   2: 'Programming',
-  4: 'PV → AC',
+  4: 'PV → Load',
   8: 'PV → Battery',
-  12: 'PV → Battery + AC',
-  16: 'Battery → AC',
+  12: 'PV → Battery + Load',
+  16: 'Battery → Load',
   17: 'Standby',
-  20: 'PV + Battery → AC',
-  32: 'AC → Battery',
-  40: 'PV + AC → Battery',
+  20: 'PV + Battery → Load',
+  32: 'Grid → Battery',
+  40: 'PV + Grid → Battery',
   64: 'Off-grid: Battery',
   96: 'Off-grid: AC-coupled charging',
   128: 'Off-grid: PV',

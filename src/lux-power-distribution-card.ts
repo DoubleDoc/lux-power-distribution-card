@@ -738,11 +738,12 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
   }
 
   convertRuntimeToString(runtime: number, format: string) {
-    const hours = Math.floor(runtime);
-    const minutes = Math.round((runtime % 1) * 60);
+    const total_minutes = Math.round(runtime * 60);
+    const hours = Math.floor(total_minutes / 60);
+    const minutes = total_minutes % 60;
     switch (format) {
       case 'short':
-        return `${hours}:${minutes} remaining`;
+        return `${hours}:${String(minutes).padStart(2, '0')} remaining`;
       case 'long':
         return `${hours}h, ${minutes}m`;
       default:
