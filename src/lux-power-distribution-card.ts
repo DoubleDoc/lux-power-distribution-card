@@ -1241,6 +1241,12 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
           .arrows-none {
             opacity: 0;
           }
+          /* Vertical feeds (PV -> inverter, inverter -> home): shorter so they don't
+             touch the icons at either end, like the grid feed */
+          #solar-arrows.arrows-down,
+          #home-arrows.arrows-down {
+            transform: rotate(-90deg) scale(0.8);
+          }
           /* Battery generator: feed stops short of the battery like the other feeds */
           .gen-arrow-cell.arrows-down {
             transform: rotate(-90deg) scale(0.8) translateX(12%);
