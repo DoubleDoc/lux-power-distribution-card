@@ -1252,18 +1252,11 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
           .gen-arrow-cell.arrows-down {
             transform: rotate(-90deg) scale(0.8) translateX(12%);
           }
-          /* Battery generator: icon at 80% of the cell, centred vertically so it
-             lines up with the solar icon in the same row */
-          #generator-image {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
+          /* Battery generator: icon at 80% of its normal size. A transform scales it
+             about its own centre, so it stays level with the solar icon and tracks
+             the other icons at any card width. */
           #generator-image img {
-            width: 80%;
-            height: auto;
-            max-width: 80%;
-            max-height: none;
+            transform: scale(0.8);
           }
           /* Battery generator: charge label sits low in its cell, next to the battery */
           .gen-charge-info {
