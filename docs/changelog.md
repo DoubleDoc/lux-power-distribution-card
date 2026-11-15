@@ -1,5 +1,20 @@
 ## Changelog
 
+### Fork (DoubleDoc), on top of upstream main (a650a6e)
+
+Features
+
+- `generator` block with `architecture: battery` (DC-coupled generator above the battery, grid still shown) or `grid` (upstream behaviour).
+- `status_codes`: `show_operating_mode`, `fault_entities`, `warning_entities`.
+- `battery.depth_of_discharge` accepts an entity or a list of entities.
+- `feed_spacing` option.
+
+Fixes
+
+- Non-numeric SoC shows `—` and skips the runtime estimate.
+- Runtime minutes zero-padded, and no `h:60` from rounding.
+- Config docs corrected: `battery.parallel_flow_entity` (was documented as `combined_flow_entity`), `consumption.allocated_power_entity` (was `allocated_power_entities`), `parallel_soc_entity` / `show_parallel_soc_entity` documented.
+
 ### v2.0.0
 
 Features

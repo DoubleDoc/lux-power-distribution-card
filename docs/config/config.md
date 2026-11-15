@@ -17,6 +17,8 @@ temp: nested object # optional
 update_time: nested object # optional
 status_codes: nested object # optional
 title: string # optional
+generator: nested object # optional (fork)
+feed_spacing: boolean # optional (fork)
 
 ```
 
@@ -36,7 +38,7 @@ battery:
     combined_soc_entity: entity # optional
     flow_entities: list of entities # conditionally required
     invert_flow: boolean # optional
-    combined_flow_entity: entity # optional
+    parallel_flow_entity: entity # optional
     discharge_live_entities: list of entities  # conditionally required
     combined_discharge_live_entity: entity # optional
     charge_live_entities: list of entities # conditionally required
@@ -45,7 +47,9 @@ battery:
     voltage_entities: list of entities # optional
     parallel_average_voltage: boolean # optional
     runtime_location: string # optional
-    depth_of_discharge: number # optional
+    depth_of_discharge: number, entity or list of entities # optional
+    parallel_soc_entity: entity # optional
+    show_parallel_soc_entity: boolean # optional
 ```
 
 | Config | Description |
@@ -54,7 +58,7 @@ battery:
 | `combined_soc_entity` | An entity that indicated the combined SoC. Used when using multiple inverters for a history graph. |
 | `flow_entities` | List of entities of the battery flow. This is when charge and discharge is combined in one entity, where  positive value is charge and negative is discharge. This is required, if `discharge_live_entities` and `charge_live_entities` are not used. |
 | `invert_flow` | When using the `flow_entities` to indicate battery flow, this flips charge and discharge. |
-| `combined_flow_entity` | An entity that indicated the combined flow. Used when using multiple inverters for a history graph. |
+| `parallel_flow_entity` | An entity that indicates the combined flow. Used when using multiple inverters for a history graph. |
 | `discharge_live_entities` | List of entities of the battery discharge. This is required along with `charge_live_entities` if `flow_entities` is not used. |
 | `combined_discharge_live_entity` | An entity that indicated the combined discharge. Used when using multiple inverters for a history graph. |
 | `charge_live_entities` | List of entities of the battery charge. This is required along with `discharge_live_entities` if `flow_entities` is not used. |
@@ -63,7 +67,9 @@ battery:
 | `voltage_entities` | List of entities of the battery voltage. |
 | `parallel_average_voltage` | This is used when there are parallel inverters, it will average the voltages when _parallel_ is selected. Otherwise the voltage will not be show when _parallel_ is selected. |
 | `runtime_location` | Can be `left`, `bottom`, or `both`. If `capacity_ah_entities` and `voltage_entities` are used, the remaining battery runtime will be calculated.  |
-| `depth_of_discharge` | Used when the runtime is calcualted, this indicated how far the battery is set to discharge. |
+| `depth_of_discharge` | Used when the runtime is calculated: how far (%) the battery is set to discharge. A number (default 20), an entity whose state is the percentage (e.g. the inverter's cut-off SOC setting), or a list of entities, one per inverter (the parallel view uses the first). Falls back to 20 when the value isn't numeric. |
+| `parallel_soc_entity` | An entity with the combined SoC, used for the history graph and, with `show_parallel_soc_entity`, as the SoC shown in the parallel view. |
+| `show_parallel_soc_entity` | Show `parallel_soc_entity` as the SoC in the parallel view instead of the average of `soc_entities`. |
 
 ### `parallel`
 
@@ -128,7 +134,7 @@ consumption:
     home_entities: list of entities # required
     combined_consumption_entity: entity # optional
     backup_entities: list of entities # optional
-    allocated_power_entities: list of entities # optional
+    allocated_power_entity: entity # optional
 ```
 
 | Config | Description |
@@ -136,7 +142,7 @@ consumption:
 | `home_entities` | List of entities for the home consumption. |
 | `combined_consumption_entity` | This is used when there are parallel inverters, it will combine the home consumption when parallel is selected. |
 | `backup_entities` | List of entities for the backup consumption. This is used when there is no power to the home consumption entities and the grid voltage is 0. |
-| `allocated_power_entities` | Optional list of entities. This is power entities that is allocated to devices. The power measurement of the entities are summed. |
+| `allocated_power_entity` | Optional entity for power allocated to a device, shown on its own branch beside the home. |
 
 ### `pv`
 
@@ -193,6 +199,9 @@ status_codes:
     overwrite_as_normal: list of numbers # optional
     overwrite_as_warning: list of numbers # optional
     overwrite_as_error: list of numbers # optional
+    show_operating_mode: boolean # optional (fork)
+    fault_entities: list of entities # optional (fork)
+    warning_entities: list of entities # optional (fork)
 ```
 
 | Config | Description |
@@ -201,6 +210,52 @@ status_codes:
 | `overwrite_as_normal` | List of codes that will be handled as a normal level regardless of the assigned default. |
 | `overwrite_as_warning` | List of codes that will be handled as a warning level regardless of the assigned default. |
 | `overwrite_as_error` | List of codes that will be handled as a error level regardless of the assigned default. |
+| `show_operating_mode` | Name the operating mode instead of showing "Normal": `PV → Load`, `PV → Battery + Load`, `Battery → Load`, `PV + Battery → Load`, `Grid → Battery`, `PV + Grid → Battery`, and the off-grid modes. "Load" is the inverter's AC output, which feeds the loads first and exports only any surplus. Levels (green/orange/red) are unchanged. |
+| `fault_entities` | Fault code entities (bitmasks), any number. A non-zero code adds a red line such as `Fault E010 (Inv 2) [0x00000400]`: each set bit n is shown as E0nn, with the raw code in hex. With more than one entity the inverter is named from `parallel.aliases`, or `Inv 1`, `Inv 2`, ... |
+| `warning_entities` | Same as `fault_entities` for warning codes, shown as orange `W0nn` lines. |
+
+### `generator` (fork)
+
+Shows a generator in one of two wirings. Without this block (and without the older options below) the card looks and works exactly like upstream.
+
+<img src="../images/battery-generator-simulated.png" width="450" />
+
+```yaml
+generator:
+    architecture: battery | grid # required
+    power_entity: entity # required (grid with several inverters: power_entities)
+    power_entities: list of entities # grid only, one per inverter
+    voltage_entity: entity # optional (grid with several inverters: voltage_entities)
+    voltage_entities: list of entities # grid only, one per inverter
+    frequency_entity: entity # optional, battery only
+    thd_entity: entity # optional, battery only
+    running_entity: entity # optional, battery only
+    active_threshold: number # optional, battery only
+    add_to_battery_flow: boolean # optional, battery only
+```
+
+| Config | Description |
+|---|---|
+| `architecture` | `battery`: the generator charges the batteries directly on the DC bus (through its own chargers and the BMSs), not through the inverter. It is drawn above the battery with an animated feed into it, and the grid stays visible. `grid`: the generator replaces the grid (upstream's original behaviour, same as `grid.generator_power_entities` / `generator_voltage_entities`); it's shown in the grid's place when grid power is 0. |
+| `power_entity` | Generator power (W). |
+| `voltage_entity` | Generator voltage (Vac). |
+| `frequency_entity` | Generator frequency (Hz). |
+| `thd_entity` | Generator voltage THD (%). Always shown while the generator is shown, 0% included. |
+| `running_entity` | An on/off entity. While `on`, the generator is always shown, with every configured reading (zeros too). While `off` or when not set, it's shown only while power is above `active_threshold`, and zero voltage/frequency are hidden. |
+| `active_threshold` | Watts. Default 0. |
+| `add_to_battery_flow` | Default `true`: generator power is added to the battery flow, so the battery's charge power and runtime show the total from the inverter and the generator. |
+
+With `architecture: battery` the generator belongs to the whole battery bank, so it's shown (and added to the battery flow) in the parallel view or when `inverter_count` is 1.
+
+The older keys still work on their own: `battery_generator:` (the battery options above, without `architecture`) and `grid.generator_power_entities` / `grid.generator_voltage_entities`. Using `generator:` together with them is an error.
+
+### `feed_spacing` (fork)
+
+`feed_spacing: true` shortens the PV → inverter and inverter → home feeds so they don't touch the icons at either end, like the grid feed. Default `false` (upstream's look).
+
+A live example with `architecture: battery`, `feed_spacing: true`, `show_operating_mode: true`:
+
+<img src="../images/battery-generator-live.png" width="450" />
 
 ## Example configs
 
