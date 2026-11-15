@@ -14,7 +14,7 @@ export type BatteryConfig = {
   voltage_entities?: string[];
   parallel_average_voltage?: boolean;
   runtime_location?: string;
-  depth_of_discharge?: string;
+  depth_of_discharge?: number | string | string[];
   parallel_flow_entity?: string;
   parallel_soc_entity?: string;
   show_parallel_soc_entity?: string;
