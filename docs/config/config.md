@@ -261,6 +261,8 @@ A live example with `architecture: battery`, `feed_spacing: true`, `show_operati
 
 There are several configs that can be used directly when you are using LuxpowerTek integration.
 
+For EG4 inverters (Luxpower OEM hardware) with the [EG4 Web Monitor](https://github.com/joyfulhouse/eg4_web_monitor) integration, see the [EG4 example](../../README.md#example-with-eg4-web-monitor) in the README. Leave out the `refresh` block there: the refresh button only works with the LuxpowerTek integration, and EG4 Web Monitor polls on its own. The README also has a [template sensor for `update_time`](../../README.md#last-update-time-from-other-integrations), since EG4 Web Monitor's last-polled sensor is a plain timestamp.
+
 Here are examples for [a single inverter](lux_single_no_sn.yaml) and [dual inverters](lux_dual_no_sn.yaml) that don't have the serial numbers in the entity names. The only functional update to these examples is that the `lux_dongles` needs to be updated with your inverter's serial number to use the refresh functionality.
 
 This example of [a single inverter](lux_single_with_sn.yaml) and [dual inverters](lux_dual_with_sn.yaml) does include the serial number in the entity name. The _single_ example, and one of the _dual_ examples, has the serial number `12345678`. Do a _find-and-replace_ to update it to your inverter's serial number. The second inverter in the _dual_ example has a serial number of `98765432`. The letters at the front of the serial number needs to be updated to use the refresh functionality.
