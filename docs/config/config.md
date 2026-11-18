@@ -242,7 +242,7 @@ generator:
 
 | Config | Description |
 |---|---|
-| `architecture` | `battery`: the generator charges the batteries directly on the DC bus (through its own chargers and the BMSs), not through the inverter. It is drawn above the battery with an animated feed into it, and the grid stays visible. `grid`: the generator replaces the grid (upstream's original behaviour, same as `grid.generator_power_entities` / `generator_voltage_entities`); it's shown in the grid's place when grid power is 0. |
+| `architecture` | `battery`: the generator charges the batteries directly on the DC bus (through its own chargers and the BMSs), not through the inverter. It is drawn above the battery with an animated feed into it, and the grid stays visible. `grid`: the generator replaces the grid (upstream's original behaviour, same as `grid.generator_power_entities` / `generator_voltage_entities`). While its power is above 0 and the grid is idle (0 W) or down (0 V), the grid's icon, power and voltage are replaced by the generator's, labelled "Generator", and the grid-down `indicators` are off. |
 | `power_entity` | Generator power (W). |
 | `voltage_entity` | Generator voltage (Vac). |
 | `frequency_entity` | Generator frequency (Hz). |

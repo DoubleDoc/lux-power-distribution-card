@@ -1028,14 +1028,20 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     const gen_voltage = this.getGeneratorVoltage();
     let grid_emoji = '';
     let grid_voltage_str = '';
-    if (grid_flow < 0) {
+    // Generator in the grid's place (grid.generator_* / generator architecture: grid):
+    // shown while it produces power and the grid is idle (0 W) or down (0 V).
+    const gen_in_grid_place = gen_power != null && gen_power > 0 && (grid_flow == 0 || grid_voltage == 0);
+    if (gen_in_grid_place) {
+      grid_arrow = ARROW_LEFT;
+    } else if (grid_flow < 0) {
       grid_arrow = ARROW_LEFT;
     } else if (grid_flow > 0) {
       grid_arrow = ARROW_RIGHT;
-    } else if (gen_power && gen_power > 0) {
-      grid_arrow = ARROW_LEFT;
     }
-    if (grid_voltage != null) {
+    if (gen_in_grid_place) {
+      // A running generator isn't a "no grid" state: no hue/dot indicators.
+      grid_voltage_str = gen_voltage != null ? `${gen_voltage} Vac` : '';
+    } else if (grid_voltage != null) {
       if (grid_voltage == 0) {
         if (this._config.grid.indicators?.hue) grid_image_class = 'blend-overlay';
         if (this._config.grid.indicators?.dot) grid_emoji = ' 🔴';
@@ -1055,7 +1061,8 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     }
     const grid_info = html`
       <div>
-        <p class="header-text">${grid_flow != null ? Math.abs(grid_flow) : gen_power != null ? Math.abs(gen_power) : 0} W</p>
+        <p class="header-text">${gen_in_grid_place ? Math.abs(gen_power!) : Math.abs(grid_flow)} W</p>
+        ${gen_in_grid_place ? html`<p class="sub-text">Generator</p>` : nothing}
         <p class="header-text">${grid_voltage_str}</p>
       </div>
     `;
@@ -1499,7 +1506,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
               <div id="inverter-image" class="cell image-cell">${inverter_image}</div>
               <div id="grid-arrows" class="cell arrow-long-cell ${grid_arrow}">${this.generateLongArrows()}</div>
               <div id="grid-image" class="cell image-cell ${grid_image_class}">
-                <img src=${getBase64Data(base64Images.Grid)} />
+                <img src=${getBase64Data(gen_in_grid_place ? base64Images.Generator : base64Images.Grid)} />
               </div>
 
               <div id="battery-soc-info" class="cell text-cell">${battery_soc_info}</div>

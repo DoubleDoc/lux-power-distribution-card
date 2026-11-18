@@ -23,7 +23,7 @@ All additions are optional; a config without them renders exactly like upstream.
 - **`battery.charge_target`** sets the SoC the charge-time estimate counts up to, instead of a fixed 90% (upstream [#103](https://github.com/DanteWinters/lux-power-distribution-card/issues/103)). It takes a number, an entity (e.g. the inverter's charge SOC limit) or one per inverter.
 - **`refresh.button_entities`** makes the refresh button press button entities, one per inverter (plus an optional `parallel_button_entity`), so it works with integrations other than LuxpowerTek, such as EG4 Web Monitor (upstream [#104](https://github.com/DanteWinters/lux-power-distribution-card/issues/104)).
 - **`feed_spacing: true`** leaves a gap between the PV/home feeds and their icons.
-- Fixes: a non-numeric SoC shows `—` instead of `NaN`; runtime minutes are zero-padded (`1:05`, not `1:5`).
+- Fixes: the generator in the grid's place (`grid.generator_*`) shows again, with its icon, power and voltage (broken since upstream v2.0); a non-numeric SoC shows `—` instead of `NaN`; runtime minutes are zero-padded (`1:05`, not `1:5`).
 
 <img src="https://raw.githubusercontent.com/DoubleDoc/lux-power-distribution-card/main/docs/images/battery-generator-simulated.png" width="400" /> <img src="https://raw.githubusercontent.com/DoubleDoc/lux-power-distribution-card/main/docs/images/battery-generator-live.png" width="300" />
 

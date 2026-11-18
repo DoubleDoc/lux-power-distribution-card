@@ -13,6 +13,7 @@ Features
 
 Fixes
 
+- Generator in the grid's place (`grid.generator_*` or `generator: architecture: grid`) works again: since v2.0 the card kept the grid icon and showed the grid's 0 W. It now shows the generator icon, power and voltage while the generator runs and the grid is idle or down.
 - Non-numeric SoC shows `—` and skips the runtime estimate.
 - Runtime minutes zero-padded, and no `h:60` from rounding.
 - Config docs corrected: `battery.parallel_flow_entity` (was documented as `combined_flow_entity`), `consumption.allocated_power_entity` (was `allocated_power_entities`), `parallel_soc_entity` / `show_parallel_soc_entity` documented.
