@@ -23,6 +23,8 @@ All additions are optional; a config without them renders exactly like upstream.
 - **`battery.charge_target`** sets the SoC the charge-time estimate counts up to, instead of a fixed 90% (upstream [#103](https://github.com/DanteWinters/lux-power-distribution-card/issues/103)). It takes a number, an entity (e.g. the inverter's charge SOC limit) or one per inverter.
 - **`refresh.button_entities`** makes the refresh button press button entities, one per inverter (plus an optional `parallel_button_entity`), so it works with integrations other than LuxpowerTek, such as EG4 Web Monitor (upstream [#104](https://github.com/DanteWinters/lux-power-distribution-card/issues/104)).
 - **Generator in the grid's place** (`grid.generator_*`, or `generator: architecture: grid`): while the generator runs and the grid is idle or down, the grid slot shows the generator's icon, power and voltage.
+- **Voltages follow each entity's display precision** in Home Assistant (for example `53.2 Vdc` instead of `53 Vdc`; upstream [#96](https://github.com/DanteWinters/lux-power-distribution-card/issues/96)). Without a display precision set, they show the decimals the sensor reports (at most 2). The runtime estimate uses the full voltage.
+- **Parallel voltages are averaged** over the inverters that report a number, for battery, grid and generator voltage alike.
 - **`feed_spacing: true`** leaves a gap between the PV/home feeds and their icons.
 - Fixes: a non-numeric SoC shows `—` instead of `NaN`; runtime minutes are zero-padded (`1:05`, not `1:5`).
 

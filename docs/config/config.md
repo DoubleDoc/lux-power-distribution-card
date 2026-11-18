@@ -66,7 +66,7 @@ battery:
 | `combined_charge_live_entity` | An entity that indicated the combined charge. Used when using multiple inverters for a history graph. |
 | `capacity_ah_entities` | List of entities of the battery capacity. Used to calculate the battery runtime remaining. |
 | `voltage_entities` | List of entities of the battery voltage. |
-| `parallel_average_voltage` | This is used when there are parallel inverters, it will average the voltages when _parallel_ is selected. Otherwise the voltage will not be show when _parallel_ is selected. |
+| `parallel_average_voltage` | This is used when there are parallel inverters, it will average the voltages when _parallel_ is selected (over the inverters whose voltage is a number). Otherwise the voltage will not be show when _parallel_ is selected. |
 | `runtime_location` | Can be `left`, `bottom`, or `both`. If `capacity_ah_entities` and `voltage_entities` are used, the remaining battery runtime will be calculated: while discharging, the time down to `depth_of_discharge`; while charging, the time up to `charge_target`. Without `runtime_location`, neither estimate is shown. |
 | `depth_of_discharge` | Used when the runtime is calculated: how far (%) the battery is set to discharge. A number (default 20), an entity whose state is the percentage (e.g. the inverter's cut-off SOC setting), or a list of entities, one per inverter (the parallel view uses the first). Falls back to 20 when the value isn't numeric. |
 | `charge_target` | Used when the runtime is calculated while charging: the SoC (%) the "remaining to charge to" estimate counts up to. Takes the same forms as `depth_of_discharge`: a number (default 90), an entity (e.g. the inverter's charge SOC limit), or a list of entities, one per inverter. Values above 100 count as 100. Falls back to 90 when the value isn't numeric. |
@@ -131,7 +131,7 @@ grid:
 | `indicators.dot` | If set and the grid voltage drops to 0, a red indicator will be added next to the grid voltage text. (Requires the `voltage_entities`). |
 | `generator_power_entities` | List of entities of the generator power. |
 | `generator_voltage_entities` | List of entities of the generator voltage. This is also used to indicate if there is no grid. |
-| `parallel_average_voltage` | This is used when there are parallel inverters, it will average the voltages when _parallel_ is selected. Otherwise the voltage will not be show when _parallel_ is selected. |
+| `parallel_average_voltage` | This is used when there are parallel inverters, it will average the voltages when _parallel_ is selected (over the inverters whose voltage is a number). Otherwise the voltage will not be show when _parallel_ is selected. |
 
 ### `consumption`
 
@@ -247,7 +247,7 @@ generator:
 | `voltage_entity` | Generator voltage (Vac). |
 | `frequency_entity` | Generator frequency (Hz). |
 | `thd_entity` | Generator voltage THD (%). Always shown while the generator is shown, 0% included. |
-| `running_entity` | An on/off entity. While `on`, the generator is always shown, with every configured reading (zeros too). While `off` or when not set, it's shown only while power is above `active_threshold`, and zero voltage/frequency are hidden. |
+| `running_entity` | An on/off entity. While `on`, the generator is always shown, with every configured reading (zeros too). While `off` or when not set, it's shown only while power is above `active_threshold`, and zero voltage/frequency are hidden. Either way, the feed into the battery only animates while power is above 0. |
 | `active_threshold` | Watts. Default 0. |
 | `add_to_battery_flow` | Default `true`: generator power is added to the battery flow, so the battery's charge power and runtime show the total from the inverter and the generator. |
 

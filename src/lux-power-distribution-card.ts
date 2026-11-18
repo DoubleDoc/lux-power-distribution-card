@@ -408,6 +408,26 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     return parseFloat(stateObj);
   }
 
+  // Average of the numeric states (unavailable entities are skipped); NaN when none are numeric.
+  getEntityParallelAverageFloat(entity_list: string[]): number {
+    const values = entity_list.map((entity) => this.getEntityStateFloat(entity)).filter((v) => !isNaN(v));
+    return values.length ? values.reduce((a, b) => a + b, 0) / values.length : NaN;
+  }
+
+  // Decimals to show for an entity's value: its display precision in Home Assistant
+  // when set, otherwise as many as its state has (at most 2).
+  getDisplayDecimals(entity?: string): number {
+    if (!entity) return 0;
+    const precision = (this.hass as any)?.entities?.[entity]?.display_precision;
+    if (typeof precision === 'number') return precision;
+    const match = /\.(\d+)$/.exec(this.hass?.states[entity]?.state ?? '');
+    return match ? Math.min(match[1].length, 2) : 0;
+  }
+
+  formatValue(value: number, entity?: string): string {
+    return isNaN(value) ? '—' : value.toFixed(this.getDisplayDecimals(entity));
+  }
+
   getEntityUnit(entity: string) {
     const stateObj = this.hass!.states[entity];
     return stateObj.attributes.unit_of_measurement;
@@ -582,10 +602,9 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
   getGridVoltage() {
     if (this._config?.grid.voltage_entities) {
       if (this._index == -1) {
-        let grid_v = this.getEntityParallelStateInt(this._config.grid.voltage_entities);
-        return Math.round(grid_v / this._config.inverter_count);
+        return this.getEntityParallelAverageFloat(this._config.grid.voltage_entities);
       } else {
-        return this.getEntityStateInt(this._config.grid.voltage_entities[this._index]);
+        return this.getEntityStateFloat(this._config.grid.voltage_entities[this._index]);
       }
     }
     return null;
@@ -594,12 +613,9 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
   getGeneratorVoltage() {
     if (this._config?.grid.generator_voltage_entities) {
       if (this._index == -1) {
-        if (this._config.grid.generator_voltage_entities) {
-          return this.getEntityParallelStateInt(this._config.grid.generator_voltage_entities);
-        }
-        return null;
+        return this.getEntityParallelAverageFloat(this._config.grid.generator_voltage_entities);
       } else {
-        return this.getEntityStateInt(this._config.grid.generator_voltage_entities[this._index]);
+        return this.getEntityStateFloat(this._config.grid.generator_voltage_entities[this._index]);
       }
     }
     return null;
@@ -750,13 +766,13 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     if (this._config?.battery.voltage_entities) {
       if (index == -1) {
         if (this._config?.battery?.parallel_average_voltage) {
-          battery_v = this.getEntityParallelStateInt(this._config.battery.voltage_entities);
-          battery_v = Math.round(battery_v / this._config.inverter_count);
-          return `${battery_v} Vdc (avg)`;
+          battery_v = this.getEntityParallelAverageFloat(this._config.battery.voltage_entities);
+          return `${this.formatValue(battery_v, this._config.battery.voltage_entities[0])} Vdc (avg)`;
         }
       } else {
-        battery_v = this.getEntityStateInt(this._config.battery.voltage_entities[index]);
-        return `${battery_v} Vdc`;
+        const entity = this._config.battery.voltage_entities[index];
+        battery_v = this.getEntityStateFloat(entity);
+        return `${isNaN(battery_v) ? '—' : this.formatValue(battery_v, entity)} Vdc`;
       }
     }
     return ``;
@@ -897,7 +913,8 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     let gen_info: TemplateResult | typeof nothing = nothing;
     let gen_arrow = ARROW_NONE;
     if (gen?.active) {
-      gen_arrow = ARROW_DOWN;
+      // Shown while running (running_entity on), but the feed only animates while it delivers power.
+      gen_arrow = gen.power > 0 ? ARROW_DOWN : ARROW_NONE;
       gen_image = html`<img
         src=${getBase64Data(base64Images.Generator)}
         @click=${() => this._openHistory(this._config!.battery_generator!.power_entity)}
@@ -906,7 +923,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
         <div>
           <p class="header-text">${gen.power} W</p>
           <p class="sub-text">Generator</p>
-          ${gen.voltage != null ? html`<p class="sub-text">${Math.round(gen.voltage)} Vac</p>` : nothing}
+          ${gen.voltage != null ? html`<p class="sub-text">${this.formatValue(gen.voltage, this._config.battery_generator!.voltage_entity)} Vac</p>` : nothing}
           ${gen.frequency != null ? html`<p class="sub-text">${gen.frequency.toFixed(1)} Hz</p>` : nothing}
           ${gen.thd != null ? html`<p class="sub-text">THD ${gen.thd.toFixed(1)}%</p>` : nothing}
         </div>
@@ -957,11 +974,11 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
         if (this._index == -1) {
           for (let i = 0; i < this._config.inverter_count; i++) {
             const cap_ah = this.getEntityStateInt(this._config.battery.capacity_ah_entities[i]);
-            total_cap_wh += cap_ah * this.getEntityStateInt(this._config.battery.voltage_entities[i]);
+            total_cap_wh += cap_ah * this.getEntityStateFloat(this._config.battery.voltage_entities[i]);
           }
         } else {
           const cap_ah = this.getEntityStateInt(this._config.battery.capacity_ah_entities[this._index]);
-          total_cap_wh = cap_ah * this.getEntityStateInt(this._config.battery.voltage_entities[this._index]);
+          total_cap_wh = cap_ah * this.getEntityStateFloat(this._config.battery.voltage_entities[this._index]);
         }
         const dod = this.getDepthOfDischarge();
         const charge_target = this.getChargeTarget();
@@ -1026,6 +1043,9 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     const gen_power = this.getGeneratorPower();
     const grid_voltage = this.getGridVoltage();
     const gen_voltage = this.getGeneratorVoltage();
+    const voltage_slot = Math.max(this._index, 0);
+    const grid_voltage_entity = this._config.grid.voltage_entities?.[voltage_slot];
+    const gen_voltage_entity = this._config.grid.generator_voltage_entities?.[voltage_slot];
     let grid_emoji = '';
     let grid_voltage_str = '';
     // Generator in the grid's place (grid.generator_* / generator architecture: grid):
@@ -1040,19 +1060,19 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     }
     if (gen_in_grid_place) {
       // A running generator isn't a "no grid" state: no hue/dot indicators.
-      grid_voltage_str = gen_voltage != null ? `${gen_voltage} Vac` : '';
+      grid_voltage_str = gen_voltage != null ? `${this.formatValue(gen_voltage, gen_voltage_entity)} Vac` : '';
     } else if (grid_voltage != null) {
       if (grid_voltage == 0) {
         if (this._config.grid.indicators?.hue) grid_image_class = 'blend-overlay';
         if (this._config.grid.indicators?.dot) grid_emoji = ' 🔴';
       }
-      grid_voltage_str = `${grid_voltage} Vac`;
+      grid_voltage_str = `${this.formatValue(grid_voltage, grid_voltage_entity)} Vac`;
     } else if (gen_voltage != null) {
       if (gen_voltage == 0) {
         if (this._config.grid.indicators?.hue) grid_image_class = 'blend-overlay';
         if (this._config.grid.indicators?.dot) grid_emoji = ' 🔴';
       }
-      grid_voltage_str = `${gen_voltage} Vac`;
+      grid_voltage_str = `${this.formatValue(gen_voltage, gen_voltage_entity)} Vac`;
     }
     if (this._index == -1) {
       grid_voltage_str = this._config.grid.parallel_average_voltage ? `${grid_voltage_str} (avg)${grid_emoji}` : '';
@@ -1311,7 +1331,8 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
           /* Battery generator: icon at 80% of its normal size. A transform scales it
              about its own centre, so it stays level with the solar icon and tracks
              the other icons at any card width. */
-          #generator-image img {
+          #generator-image img,
+          #grid-image.gen-in-grid img {
             transform: scale(0.8);
           }
           /* Battery generator: charge label sits low in its cell, next to the battery */
@@ -1505,7 +1526,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
               <div id="battery-arrows" class="cell arrow-cell ${battery_arrow}">${this.generateArrows()}</div>
               <div id="inverter-image" class="cell image-cell">${inverter_image}</div>
               <div id="grid-arrows" class="cell arrow-long-cell ${grid_arrow}">${this.generateLongArrows()}</div>
-              <div id="grid-image" class="cell image-cell ${grid_image_class}">
+              <div id="grid-image" class="cell image-cell ${grid_image_class} ${gen_in_grid_place ? 'gen-in-grid' : ''}">
                 <img src=${getBase64Data(gen_in_grid_place ? base64Images.Generator : base64Images.Grid)} />
               </div>
 

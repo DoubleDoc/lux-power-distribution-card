@@ -10,6 +10,9 @@ Features
 - `battery.charge_target` sets the SoC the charge-time estimate counts up to (was fixed at 90%); a number, entity or list of entities (upstream #103).
 - `refresh.button_entities` / `parallel_button_entity`: the refresh button presses button entities, so it works with integrations other than LuxpowerTek (upstream #104).
 - Generator in the grid's place (`grid.generator_*` or `generator: architecture: grid`): while the generator runs and the grid is idle (0 W) or down (0 V), the grid slot shows the generator icon, its power labelled "Generator" and its voltage, without the grid-down indicators.
+- Voltages (battery, grid, generator) follow each entity's display precision, or the decimals in its state (at most 2); the runtime estimate uses the full voltage (upstream #96).
+- Parallel view: battery, grid and generator voltages are averaged over the inverters with a numeric state.
+- Battery generator: its feed into the battery animates only while its power is above 0; the generator icon in the grid's place is drawn at 80%, like the one above the battery.
 - `feed_spacing` option.
 
 Fixes
