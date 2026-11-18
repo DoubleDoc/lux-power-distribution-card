@@ -87,7 +87,9 @@ battery:
     - sensor.parallel_group_a_battery_voltage
   capacity_ah_entities:
     - sensor.parallel_group_a_battery_max_capacity
+  runtime_location: left
   depth_of_discharge: number.18kpv_1234567890_off_grid_soc_cut_off
+  charge_target: number.18kpv_1234567890_system_charge_soc_limit
 grid:
   flow_entities:
     - sensor.parallel_group_a_grid_power
