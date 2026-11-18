@@ -48,6 +48,7 @@ battery:
     parallel_average_voltage: boolean # optional
     runtime_location: string # optional
     depth_of_discharge: number, entity or list of entities # optional
+    charge_target: number, entity or list of entities # optional
     parallel_soc_entity: entity # optional
     show_parallel_soc_entity: boolean # optional
 ```
@@ -68,6 +69,7 @@ battery:
 | `parallel_average_voltage` | This is used when there are parallel inverters, it will average the voltages when _parallel_ is selected. Otherwise the voltage will not be show when _parallel_ is selected. |
 | `runtime_location` | Can be `left`, `bottom`, or `both`. If `capacity_ah_entities` and `voltage_entities` are used, the remaining battery runtime will be calculated.  |
 | `depth_of_discharge` | Used when the runtime is calculated: how far (%) the battery is set to discharge. A number (default 20), an entity whose state is the percentage (e.g. the inverter's cut-off SOC setting), or a list of entities, one per inverter (the parallel view uses the first). Falls back to 20 when the value isn't numeric. |
+| `charge_target` | Used when the runtime is calculated while charging: the SoC (%) the "remaining to charge to" estimate counts up to. Takes the same forms as `depth_of_discharge`: a number (default 90), an entity (e.g. the inverter's charge SOC limit), or a list of entities, one per inverter. Values above 100 count as 100. Falls back to 90 when the value isn't numeric. |
 | `parallel_soc_entity` | An entity with the combined SoC, used for the history graph and, with `show_parallel_soc_entity`, as the SoC shown in the parallel view. |
 | `show_parallel_soc_entity` | Show `parallel_soc_entity` as the SoC in the parallel view instead of the average of `soc_entities`. |
 

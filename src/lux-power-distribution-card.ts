@@ -314,11 +314,10 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     return parseInt(stateObj);
   }
 
-  // depth_of_discharge: a number (20), an entity id ("number.x"), or a list of
-  // entity ids, one per inverter (the parallel view uses the first). Falls back
-  // to 20% when the value or the entity's state isn't a number.
-  getDepthOfDischarge(): number {
-    const cfg = this._config?.battery.depth_of_discharge;
+  // A SoC setting (%): a number, an entity id ("number.x"), or a list of entity
+  // ids, one per inverter (the parallel view uses the first). Returns the
+  // fallback when the value or the entity's state isn't a number.
+  getSocSetting(cfg: number | string | string[] | undefined, fallback: number): number {
     let value: number = NaN;
     if (typeof cfg === 'number') {
       value = cfg;
@@ -328,7 +327,18 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
       const entity = cfg[Math.min(Math.max(this._index, 0), cfg.length - 1)];
       value = parseFloat(this.hass?.states[entity]?.state ?? '');
     }
-    return isNaN(value) ? 20 : value;
+    return isNaN(value) ? fallback : value;
+  }
+
+  // depth_of_discharge: how far the battery discharges, for the runtime estimate. Default 20%.
+  getDepthOfDischarge(): number {
+    return this.getSocSetting(this._config?.battery.depth_of_discharge, 20);
+  }
+
+  // charge_target: the SoC the charge-time estimate counts up to. Default 90%
+  // (upstream's fixed value); capped at 100, since some inverters use 101 for top balancing.
+  getChargeTarget(): number {
+    return Math.min(this.getSocSetting(this._config?.battery.charge_target, 90), 100);
   }
 
   // Numeric state of an optional entity, or null when it's missing or not numeric.
@@ -939,6 +949,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
           total_cap_wh = cap_ah * this.getEntityStateInt(this._config.battery.voltage_entities[this._index]);
         }
         const dod = this.getDepthOfDischarge();
+        const charge_target = this.getChargeTarget();
         if (battery_flow < 0) {
           const avail_wh = (total_cap_wh * (battery_soc - dod)) / 100;
           const rem_h = avail_wh / Math.abs(battery_flow);
@@ -948,11 +959,11 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
           if (['left', 'both'].includes(this._config.battery.runtime_location)) {
             battery_top_runtime = html`<p class="header-text">${this.convertRuntimeToString(rem_h, 'short')}</p>`;
           }
-        } else if (battery_flow > 0 && battery_soc < 90) {
-          const avail_wh = (total_cap_wh * (90 - battery_soc)) / 100;
+        } else if (battery_flow > 0 && battery_soc < charge_target) {
+          const avail_wh = (total_cap_wh * (charge_target - battery_soc)) / 100;
           const rem_h = avail_wh / Math.abs(battery_flow);
           if (['bottom', 'both'].includes(this._config.battery.runtime_location)) {
-            battery_bottom_runtime = html`<p id="time-info" class="header-text">${this.convertRuntimeToString(rem_h, 'long')} remaining to charge to 90%</p>`;
+            battery_bottom_runtime = html`<p id="time-info" class="header-text">${this.convertRuntimeToString(rem_h, 'long')} remaining to charge to ${charge_target}%</p>`;
           }
           if (['left', 'both'].includes(this._config.battery.runtime_location)) {
             battery_top_runtime = html`<p class="header-text">${this.convertRuntimeToString(rem_h, 'short')}</p>`;

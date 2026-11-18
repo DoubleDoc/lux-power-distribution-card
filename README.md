@@ -20,6 +20,7 @@ All additions are optional; a config without them renders exactly like upstream.
 - **`generator`** with `architecture: battery` draws a generator that charges the batteries directly on the DC bus (through its own chargers and the BMSs, not the inverter). It sits above the battery with an animated feed and appears only while running (power above a threshold, or forced on by a `running_entity`). It shows power plus optional voltage, frequency and THD, and its power is added to the battery flow. The grid stays visible. `architecture: grid` gives upstream's original behaviour, where the generator replaces the grid.
 - **`status_codes.show_operating_mode`** names the operating mode (e.g. `PV → Battery + Load`) instead of "Normal"; **`fault_entities`** / **`warning_entities`** show non-zero fault and warning codes as red/orange lines.
 - **`battery.depth_of_discharge`** also accepts an entity (e.g. the inverter's cut-off SOC setting) or one per inverter.
+- **`battery.charge_target`** sets the SoC the charge-time estimate counts up to, instead of a fixed 90% (upstream [#103](https://github.com/DanteWinters/lux-power-distribution-card/issues/103)). It takes a number, an entity (e.g. the inverter's charge SOC limit) or one per inverter.
 - **`feed_spacing: true`** leaves a gap between the PV/home feeds and their icons.
 - Fixes: a non-numeric SoC shows `—` instead of `NaN`; runtime minutes are zero-padded (`1:05`, not `1:5`).
 

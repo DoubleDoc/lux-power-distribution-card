@@ -7,6 +7,7 @@ Features
 - `generator` block with `architecture: battery` (DC-coupled generator above the battery, grid still shown) or `grid` (upstream behaviour).
 - `status_codes`: `show_operating_mode`, `fault_entities`, `warning_entities`.
 - `battery.depth_of_discharge` accepts an entity or a list of entities.
+- `battery.charge_target` sets the SoC the charge-time estimate counts up to (was fixed at 90%); a number, entity or list of entities (upstream #103).
 - `feed_spacing` option.
 
 Fixes
