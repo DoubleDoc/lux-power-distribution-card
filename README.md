@@ -21,6 +21,7 @@ All additions are optional; a config without them renders exactly like upstream.
 - **`status_codes.show_operating_mode`** names the operating mode (e.g. `PV → Battery + Load`) instead of "Normal"; **`fault_entities`** / **`warning_entities`** show non-zero fault and warning codes as red/orange lines.
 - **`battery.depth_of_discharge`** also accepts an entity (e.g. the inverter's cut-off SOC setting) or one per inverter.
 - **`battery.charge_target`** sets the SoC the charge-time estimate counts up to, instead of a fixed 90% (upstream [#103](https://github.com/DanteWinters/lux-power-distribution-card/issues/103)). It takes a number, an entity (e.g. the inverter's charge SOC limit) or one per inverter.
+- **`refresh.button_entities`** makes the refresh button press button entities, one per inverter (plus an optional `parallel_button_entity`), so it works with integrations other than LuxpowerTek, such as EG4 Web Monitor (upstream [#104](https://github.com/DanteWinters/lux-power-distribution-card/issues/104)).
 - **`feed_spacing: true`** leaves a gap between the PV/home feeds and their icons.
 - Fixes: a non-numeric SoC shows `—` instead of `NaN`; runtime minutes are zero-padded (`1:05`, not `1:5`).
 
@@ -68,8 +69,8 @@ Currently, the UI editor does not work. The only way to add the card is to add t
 
 The card doesn't need any particular integration. Every value is an entity you choose, so sensors from any integration, or your own template sensors, can be linked. Two common sources:
 
-- **LuxpowerTek integration:** hosted in a private repository by [Guy Wells](https://github.com/guybw). The [example configs](/docs/config/config.md#example-configs) are written for it, and it's the only source the refresh button works with.
-- **[EG4 Web Monitor](https://github.com/joyfulhouse/eg4_web_monitor):** for EG4 inverters (Luxpower OEM hardware). It reads the inverters over local Modbus and/or EG4's cloud and polls on its own, so leave out the `refresh` block; the card's refresh button doesn't work with it and isn't needed.
+- **LuxpowerTek integration:** hosted in a private repository by [Guy Wells](https://github.com/guybw). The [example configs](/docs/config/config.md#example-configs) are written for it, and the refresh button's `lux_dongles` option calls its refresh service.
+- **[EG4 Web Monitor](https://github.com/joyfulhouse/eg4_web_monitor):** for EG4 inverters (Luxpower OEM hardware). It reads the inverters over local Modbus and/or EG4's cloud and polls on its own, so a refresh button is optional. If you want one, point `refresh.button_entities` at the integration's refresh buttons (see [Refresh](#refresh-and-the-dongle-serial-number)).
 
 ### Example with EG4 Web Monitor
 
@@ -120,8 +121,14 @@ update_time:
   show_time_since: true
   show_datetime: true
   has_timestamp_attribute: true
+refresh:
+  button_entities:
+    - button.parallel_group_a_refresh_data
+  button_location: right
 feed_spacing: true
 ```
+
+With `inverter_count: 1` covering the whole parallel group, the group's refresh button refreshes both inverters. With one card per inverter view (`inverter_count: 2`), list each inverter's `button.18kpv_<serial>_refresh_data` in order and set `parallel_button_entity: button.parallel_group_a_refresh_data`.
 
 ### Last-update time from other integrations
 
@@ -144,7 +151,10 @@ Then use it with `has_timestamp_attribute: true`, as in the example above.
 
 ## Refresh and the Dongle serial number
 
-This refresh only works with the LuxpowerTek integration referenced above. The service name and function call format are hard-coded. With any other source, such as EG4 Web Monitor, leave out the `refresh` block (or set `button_location: none`).
+The refresh button can work in two ways, and both can be set:
+
+- **`lux_dongles`:** calls the LuxpowerTek integration's refresh service for each dongle serial. The service name and call format are hard-coded, so this only works with that integration.
+- **`button_entities`:** presses button entities, one per inverter, for any integration that exposes a refresh button, such as EG4 Web Monitor. In the parallel view it presses all of them, or `parallel_button_entity` if set.
 
 The location of the refresh button can be set with the *refresh_button_location* config value. There are 4 accepted values for this config:
 

@@ -93,12 +93,16 @@ parallel:
 ```yaml
 refresh:
     lux_dongles: list of strings # conditionally required
+    button_entities: list of entities # optional
+    parallel_button_entity: entity # optional
     button_location: string # optional
 ```
 
 | Config | Description |
 |---|---|
 | `lux_dongles` | List of inverter serial numbers that is used for the refresh button, or as the indicators when there are multiple. This or the `aliases` in `parallel` is requried when using multiple inverters. |
+| `button_entities` | Button entities to press when the refresh button is clicked, one per inverter (same order as the inverters), for integrations that expose a refresh button rather than the LuxpowerTek service. Example: EG4 Web Monitor's `button.<model>_<serial>_refresh_data`. The parallel view presses all of them, or `parallel_button_entity` if set. Can be used with or without `lux_dongles`. |
+| `parallel_button_entity` | A single button entity pressed in the parallel view instead of every `button_entities` entry, e.g. EG4 Web Monitor's `button.parallel_group_a_refresh_data`. |
 | `button_location` | The location of the refresh button. Can be `left`, `right` or `both`. |
 
 ### `grid`
@@ -263,7 +267,7 @@ A live example with `architecture: battery`, `feed_spacing: true`, `show_operati
 
 There are several configs that can be used directly when you are using LuxpowerTek integration.
 
-For EG4 inverters (Luxpower OEM hardware) with the [EG4 Web Monitor](https://github.com/joyfulhouse/eg4_web_monitor) integration, see the [EG4 example](../../README.md#example-with-eg4-web-monitor) in the README. Leave out the `refresh` block there: the refresh button only works with the LuxpowerTek integration, and EG4 Web Monitor polls on its own. The README also has a [template sensor for `update_time`](../../README.md#last-update-time-from-other-integrations), since EG4 Web Monitor's last-polled sensor is a plain timestamp.
+For EG4 inverters (Luxpower OEM hardware) with the [EG4 Web Monitor](https://github.com/joyfulhouse/eg4_web_monitor) integration, see the [EG4 example](../../README.md#example-with-eg4-web-monitor) in the README. For a refresh button, use `refresh.button_entities` with the integration's refresh buttons instead of `lux_dongles`. The README also has a [template sensor for `update_time`](../../README.md#last-update-time-from-other-integrations), since EG4 Web Monitor's last-polled sensor is a plain timestamp.
 
 Here are examples for [a single inverter](lux_single_no_sn.yaml) and [dual inverters](lux_dual_no_sn.yaml) that don't have the serial numbers in the entity names. The only functional update to these examples is that the `lux_dongles` needs to be updated with your inverter's serial number to use the refresh functionality.
 

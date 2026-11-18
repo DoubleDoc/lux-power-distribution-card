@@ -8,6 +8,7 @@ Features
 - `status_codes`: `show_operating_mode`, `fault_entities`, `warning_entities`.
 - `battery.depth_of_discharge` accepts an entity or a list of entities.
 - `battery.charge_target` sets the SoC the charge-time estimate counts up to (was fixed at 90%); a number, entity or list of entities (upstream #103).
+- `refresh.button_entities` / `parallel_button_entity`: the refresh button presses button entities, so it works with integrations other than LuxpowerTek (upstream #104).
 - `feed_spacing` option.
 
 Fixes
