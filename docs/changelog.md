@@ -9,11 +9,11 @@ Features
 - `battery.depth_of_discharge` accepts an entity or a list of entities.
 - `battery.charge_target` sets the SoC the charge-time estimate counts up to (was fixed at 90%); a number, entity or list of entities (upstream #103).
 - `refresh.button_entities` / `parallel_button_entity`: the refresh button presses button entities, so it works with integrations other than LuxpowerTek (upstream #104).
+- Generator in the grid's place (`grid.generator_*` or `generator: architecture: grid`): while the generator runs and the grid is idle (0 W) or down (0 V), the grid slot shows the generator icon, its power labelled "Generator" and its voltage, without the grid-down indicators.
 - `feed_spacing` option.
 
 Fixes
 
-- Generator in the grid's place (`grid.generator_*` or `generator: architecture: grid`) works again: since v2.0 the card kept the grid icon and showed the grid's 0 W. It now shows the generator icon, power and voltage while the generator runs and the grid is idle or down.
 - Non-numeric SoC shows `—` and skips the runtime estimate.
 - Runtime minutes zero-padded, and no `h:60` from rounding.
 - Config docs corrected: `battery.parallel_flow_entity` (was documented as `combined_flow_entity`), `consumption.allocated_power_entity` (was `allocated_power_entities`), `parallel_soc_entity` / `show_parallel_soc_entity` documented.
