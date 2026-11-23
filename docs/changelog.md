@@ -1,25 +1,48 @@
 ## Changelog
 
-### Fork (DoubleDoc), on top of upstream main (a650a6e)
+### Fork (DoubleDoc), on top of upstream 2.1.0
 
 Features
 
-- `generator` block with `architecture: battery` (DC-coupled generator above the battery, grid still shown) or `grid` (upstream behaviour).
+- `generator` block with `architecture: battery` (a DC-coupled generator drawn above the battery, with the grid still shown) or `architecture: grid` (the generator in the grid's place, upstream's `grid.generator_*`).
+- Battery generator: shows power, voltage, frequency and THD; appears while its power is above `active_threshold` or while `running_entity` is on; its power is added to the battery flow (`add_to_battery_flow`); its feed into the battery animates only while its power is above 0.
+- Generator in the grid's place: while the generator runs and the grid is idle (0 W) or down (0 V), the grid slot shows the generator icon at 80%, its power labelled "Generator" and its voltage, without the grid-down indicators.
 - `status_codes`: `show_operating_mode`, `fault_entities`, `warning_entities`.
-- `battery.depth_of_discharge` accepts an entity or a list of entities.
-- `battery.charge_target` sets the SoC the charge-time estimate counts up to (was fixed at 90%); a number, entity or list of entities (upstream #103).
-- `refresh.button_entities` / `parallel_button_entity`: the refresh button presses button entities, so it works with integrations other than LuxpowerTek (upstream #104).
-- Generator in the grid's place (`grid.generator_*` or `generator: architecture: grid`): while the generator runs and the grid is idle (0 W) or down (0 V), the grid slot shows the generator icon, its power labelled "Generator" and its voltage, without the grid-down indicators.
-- Voltages (battery, grid, generator) follow each entity's display precision, or the decimals in its state (at most 2); the runtime estimate uses the full voltage (upstream #96).
-- Parallel view: battery, grid and generator voltages are averaged over the inverters with a numeric state.
-- Battery generator: its feed into the battery animates only while its power is above 0; the generator icon in the grid's place is drawn at 80%, like the one above the battery.
+- `battery.depth_of_discharge` also accepts an entity or a list of entities (one per inverter).
+- Voltages follow each entity's display precision in Home Assistant when `voltage_decimal` isn't set (`voltage_decimal: true` or `false` work as upstream); the runtime estimate uses the full voltage.
 - `feed_spacing` option.
 
-Fixes
+### 2.1.0
 
-- Non-numeric SoC shows `—` and skips the runtime estimate.
-- Runtime minutes zero-padded, and no `h:60` from rounding.
-- Config docs corrected: `battery.parallel_flow_entity` (was documented as `combined_flow_entity`), `consumption.allocated_power_entity` (was `allocated_power_entities`), `parallel_soc_entity` / `show_parallel_soc_entity` documented.
+Features
+
+- UI card editor (#89).
+- The card picker ("Add card") shows an example of the card.
+- `battery.shared` / `battery.shared_index` for parallel inverters sharing one battery bank (#101).
+- `battery.charge_target_soc` to set the target of the charging time, instead of a fixed 90% (#103). Values up to 150% are accepted, e.g. 101% for inverters that top balance.
+- `battery.voltage_decimal` and `grid.voltage_decimal` to show voltages with 1 decimal.
+- Every option can be set in the UI editor, in collapsible sections (less common options under "advanced" areas).
+- Warnings, on the card and in the editor, for options the card would ignore or show wrongly: typos and old option names, per-inverter lists with too few or too many entries, invalid values, and update entities without a `timestamp` attribute.
+- While required entities aren't chosen yet (e.g. setting the card up in the UI editor), the card shows what is still needed instead of a configuration error.
+- `refresh.action` and `refresh.inverter_actions` to run any Home Assistant action from the refresh button, e.g. another integration's refresh button, for all inverters or per inverter (#104). Existing `lux_dongles` configs are unchanged.
+
+Bugfixes
+
+- Battery runtime counted a shared battery once per inverter and used only one inverter's flow (#101).
+- Missing entities are listed in a warning on the card instead of crashing it; missing or unavailable values read as 0 (#34).
+- Multi-inverter cards always get the inverter selector; inverters without a name show their dongle serial or "Inverter N" (before, cards without `aliases` had no selector, and dongle serials alone gave only "Parallel").
+- Values are rounded instead of cut off (52.9 V shows as 53 V, as in HA) (#96), and power in kW/MW is converted to W (#10).
+- Unavailable SOC or voltage shows as "–" instead of 0: no empty battery, negative runtime or false "no grid" indicator.
+- Runtime: at or below the depth of discharge it shows "Below the 20% depth of discharge" instead of a negative time, "3:07" instead of "3:7", and never "2h, 60m".
+- "Updated … ago" counts in hours and days, not only minutes.
+- Warnings for a refresh button with nothing to call; `inverter_count` must be a whole number.
+- History graphs open on click after the card was first set up in the UI editor.
+- The card only re-draws when one of its entities changes (it re-drew every 0.5 s).
+- Generator fields are marked experimental in the UI editor (#66).
+- Parallel view averages the generator voltage instead of adding it up (same fix as the grid voltage in #92).
+- Docs: the battery's `combined_*` options were never used by the card; documented `parallel_flow_entity`, `parallel_soc_entity` and `show_parallel_soc_entity` instead.
+- Docs: `allocated_power_entity` takes one entity, not a list, with steps for creating a Sum helper (#102).
+- Build no longer down-levels Lit, which broke rendering of lists (`_k is not defined`).
 
 ### v2.0.0
 

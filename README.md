@@ -15,18 +15,14 @@ A simple power distribution card of an inverter and battery system, for [Home As
 
 ## Fork changes
 
-All additions are optional; a config without them renders exactly like upstream. Details are in the [config](/docs/config/config.md) document.
+Built on upstream **v2.1.0** (UI editor, shared battery, `battery.charge_target_soc`, `refresh.action`, and more; see the [changelog](/docs/changelog.md)). All fork additions are optional; a config without them renders exactly like upstream. Details are in the [config](/docs/config/config.md) document.
 
-- **`generator`** with `architecture: battery` draws a generator that charges the batteries directly on the DC bus (through its own chargers and the BMSs, not the inverter). It sits above the battery with an animated feed and appears only while running (power above a threshold, or forced on by a `running_entity`). It shows power plus optional voltage, frequency and THD, and its power is added to the battery flow. The grid stays visible. `architecture: grid` gives upstream's original behaviour, where the generator replaces the grid.
+- **`generator`** with `architecture: battery` draws a generator that charges the batteries directly on the DC bus (through its own chargers and the BMSs, not the inverter). It sits above the battery with an animated feed and appears only while running (power above a threshold, or forced on by a `running_entity`). It shows power plus optional voltage, frequency and THD, and its power is added to the battery flow. The grid stays visible. The feed only animates while the generator delivers power.
+- **Generator in the grid's place** (`architecture: grid`, or upstream's `grid.generator_*`): while the generator runs and the grid is idle or down, the grid slot shows the generator's icon, power and voltage.
 - **`status_codes.show_operating_mode`** names the operating mode (e.g. `PV → Battery + Load`) instead of "Normal"; **`fault_entities`** / **`warning_entities`** show non-zero fault and warning codes as red/orange lines.
 - **`battery.depth_of_discharge`** also accepts an entity (e.g. the inverter's cut-off SOC setting) or one per inverter.
-- **`battery.charge_target`** sets the SoC the charge-time estimate counts up to, instead of a fixed 90% (upstream [#103](https://github.com/DanteWinters/lux-power-distribution-card/issues/103)). It takes a number, an entity (e.g. the inverter's charge SOC limit) or one per inverter.
-- **`refresh.button_entities`** makes the refresh button press button entities, one per inverter (plus an optional `parallel_button_entity`), so it works with integrations other than LuxpowerTek, such as EG4 Web Monitor (upstream [#104](https://github.com/DanteWinters/lux-power-distribution-card/issues/104)).
-- **Generator in the grid's place** (`grid.generator_*`, or `generator: architecture: grid`): while the generator runs and the grid is idle or down, the grid slot shows the generator's icon, power and voltage.
-- **Voltages follow each entity's display precision** in Home Assistant (for example `53.2 Vdc` instead of `53 Vdc`; upstream [#96](https://github.com/DanteWinters/lux-power-distribution-card/issues/96)). Without a display precision set, they show the decimals the sensor reports (at most 2). The runtime estimate uses the full voltage.
-- **Parallel voltages are averaged** over the inverters that report a number, for battery, grid and generator voltage alike.
+- **Voltages follow each entity's display precision** in Home Assistant when `voltage_decimal` isn't set, for example `52.50 Vdc` for a sensor shown with 2 decimals. `voltage_decimal: true` (1 decimal) or `false` (whole volts) work as upstream. The runtime estimate uses the full voltage.
 - **`feed_spacing: true`** leaves a gap between the PV/home feeds and their icons.
-- Fixes: a non-numeric SoC shows `—` instead of `NaN`; runtime minutes are zero-padded (`1:05`, not `1:5`).
 
 <img src="https://raw.githubusercontent.com/DoubleDoc/lux-power-distribution-card/main/docs/images/battery-generator-simulated.png" width="400" /> <img src="https://raw.githubusercontent.com/DoubleDoc/lux-power-distribution-card/main/docs/images/battery-generator-live.png" width="300" />
 
@@ -66,14 +62,14 @@ After replacing the file, change the resource URL (for example add `?v=2`) so br
 
 ## Adding the card to the dashboard
 
-Currently, the UI editor does not work. The only way to add the card is to add the `yaml` code. There are examples in [config](/docs/config/config.md) document.
+Every option can be set in the UI editor, or in `yaml`. The editor also lists what is still needed to finish the setup, and warns about options the card would ignore (typos, old option names, lists with the wrong number of entries). There are examples in [config](/docs/config/config.md) document.
 
 ## Sensor sources
 
 The card doesn't need any particular integration. Every value is an entity you choose, so sensors from any integration, or your own template sensors, can be linked. Two common sources:
 
 - **LuxpowerTek integration:** hosted in a private repository by [Guy Wells](https://github.com/guybw). The [example configs](/docs/config/config.md#example-configs) are written for it, and the refresh button's `lux_dongles` option calls its refresh service.
-- **[EG4 Web Monitor](https://github.com/joyfulhouse/eg4_web_monitor):** for EG4 inverters (Luxpower OEM hardware). It reads the inverters over local Modbus and/or EG4's cloud and polls on its own, so a refresh button is optional. If you want one, point `refresh.button_entities` at the integration's refresh buttons (see [Refresh](#refresh-and-the-dongle-serial-number)).
+- **[EG4 Web Monitor](https://github.com/joyfulhouse/eg4_web_monitor):** for EG4 inverters (Luxpower OEM hardware). It reads the inverters over local Modbus and/or EG4's cloud and polls on its own, so a refresh button is optional. If you want one, set `refresh.action` to press the integration's refresh button (see the example below).
 
 ### Example with EG4 Web Monitor
 
@@ -93,7 +89,7 @@ battery:
     - sensor.parallel_group_a_battery_max_capacity
   runtime_location: left
   depth_of_discharge: number.18kpv_1234567890_off_grid_soc_cut_off
-  charge_target: number.18kpv_1234567890_system_charge_soc_limit
+  charge_target_soc: 100
 grid:
   flow_entities:
     - sensor.parallel_group_a_grid_power
@@ -125,13 +121,16 @@ update_time:
   show_datetime: true
   has_timestamp_attribute: true
 refresh:
-  button_entities:
-    - button.parallel_group_a_refresh_data
+  action:
+    action: perform-action
+    perform_action: button.press
+    target:
+      entity_id: button.parallel_group_a_refresh_data
   button_location: right
 feed_spacing: true
 ```
 
-With `inverter_count: 1` covering the whole parallel group, the group's refresh button refreshes both inverters. With one card per inverter view (`inverter_count: 2`), list each inverter's `button.18kpv_<serial>_refresh_data` in order and set `parallel_button_entity: button.parallel_group_a_refresh_data`.
+With `inverter_count: 1` covering the whole parallel group, the group's refresh button refreshes both inverters. With one card per inverter view (`inverter_count: 2`), give each inverter its own `button.18kpv_<serial>_refresh_data` in `refresh.inverter_actions`, and keep the group's button in `refresh.action` for the Parallel view.
 
 ### Last-update time from other integrations
 
@@ -154,12 +153,9 @@ Then use it with `has_timestamp_attribute: true`, as in the example above.
 
 ## Refresh and the Dongle serial number
 
-The refresh button can work in two ways, and both can be set:
+By default the refresh button calls the LuxPowerTek integration's refresh service for the dongles in *refresh.lux_dongles*. To use another integration, set *refresh.action* to any Home Assistant action (for example pressing that integration's refresh button); see [config](/docs/config/config.md).
 
-- **`lux_dongles`:** calls the LuxpowerTek integration's refresh service for each dongle serial. The service name and call format are hard-coded, so this only works with that integration.
-- **`button_entities`:** presses button entities, one per inverter, for any integration that exposes a refresh button, such as EG4 Web Monitor. In the parallel view it presses all of them, or `parallel_button_entity` if set.
-
-The location of the refresh button can be set with the *refresh_button_location* config value. There are 4 accepted values for this config:
+The location of the refresh button can be set with the *refresh.button_location* config value. There are 4 accepted values for this config:
 
 - left (Displayed on the left hand side, below the battery text.)
 - right (Displayed on the right hand side, above the grid image.)
@@ -168,7 +164,15 @@ The location of the refresh button can be set with the *refresh_button_location*
 
 ## Allocated power entity
 
-The *allocated_power_entity* is an entity for allocated power in your house. It is a helper group of summed entities, that allow you to see how much of your power is assigned to devices. The reason this is a single grouped item, is because then it works well with the history graph.
+The *allocated_power_entity* shows how much of your power goes to specific devices (for example a geyser, pool pump and heat pump). It takes **one** entity, not a list. To combine several devices, create a helper that adds them up:
+
+1. Go to **Settings → Devices & services → Helpers → Create helper → Group → Sensor group**.
+2. Give it a name, set **Type** to **Sum**, and add the power sensors (W) of the devices.
+3. Use the new helper as `consumption.allocated_power_entity` (it can also be picked in the UI editor).
+
+A single helper also gives one clean history graph when you click it on the card.
+
+Older versions of these docs described a list called *allocated_power_entities*; that option was never read by the card.
 
 ## Grid indicators
 
