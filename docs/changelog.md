@@ -13,6 +13,7 @@ Features
 - `battery.depth_of_discharge` also accepts an entity or a list of entities (one per inverter).
 - Voltages follow each entity's display precision in Home Assistant when `voltage_decimal` isn't set (`voltage_decimal: true` or `false` work as upstream); the runtime estimate uses the full voltage.
 - `feed_spacing` option.
+- The card also redraws when a plain `entities` list changes (`status_codes.entities`, `temp.entities`, `update_time.entities`) and when a `depth_of_discharge` entity changes, not only when a power reading does.
 
 ### 2.1.0
 

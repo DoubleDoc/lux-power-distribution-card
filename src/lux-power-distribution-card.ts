@@ -568,8 +568,9 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     const walk = (value: unknown, key = '') => {
       if (Array.isArray(value)) value.forEach((item) => walk(item, key));
       else if (value && typeof value === 'object') Object.entries(value).forEach(([k, v]) => walk(v, k));
-      // Fork: depth_of_discharge can be an entity (or one per inverter) too.
-      else if (typeof value === 'string' && /_entit(y|ies)$|^depth_of_discharge$/.test(key) && value.includes('.'))
+      // Fork: plain `entities` lists (status_codes, temp, update_time) are watched too, and
+      // depth_of_discharge can be an entity (or one per inverter).
+      else if (typeof value === 'string' && /(^|_)entit(y|ies)$|^depth_of_discharge$/.test(key) && value.includes('.'))
         found.push(value);
     };
     walk(config);
