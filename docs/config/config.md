@@ -63,7 +63,7 @@ battery:
 | `capacity_ah_entities` | List of entities of the battery capacity. Used to calculate the battery runtime remaining. |
 | `voltage_entities` | List of entities of the battery voltage. |
 | `parallel_average_voltage` | This is used when there are parallel inverters, it will average the voltages when _parallel_ is selected. Otherwise the voltage will not be show when _parallel_ is selected. |
-| `voltage_decimal` | Show the battery voltage with 1 decimal (e.g. `52.8 Vdc` instead of `52 Vdc`). Fork: when `voltage_decimal` isn't set, the voltage follows the entity's display precision in Home Assistant (or the decimals in its state, at most 2); set it to `false` for whole volts. |
+| `voltage_decimal` | Show the battery voltage with 1 decimal (e.g. `52.8 Vdc` instead of `52 Vdc`). Fork: when `voltage_decimal` isn't set, the voltage follows the entity's display precision in Home Assistant (or the decimals in its state, at most 2); set it to `false` for whole volts. In the UI editor this is the three-way choice _display precision_ / _1 decimal_ / _whole volts_. |
 | `runtime_location` | Can be `left`, `bottom`, or `both`. If `capacity_ah_entities` and `voltage_entities` are used, the remaining battery runtime will be calculated: while discharging, the time down to `depth_of_discharge`; while charging, the time up to `charge_target_soc`. Without `runtime_location`, neither estimate is shown. |
 | `depth_of_discharge` | Used when the runtime is calculated: how far (%) the battery is set to discharge. A number (default 20), an entity whose state is the percentage (e.g. the inverter's cut-off SOC setting), or a list of entities, one per inverter (the parallel view uses the first). Falls back to 20 when the value isn't numeric. |
 | `charge_target_soc` | The SoC the charging time is calculated to (1-150, default `90`), e.g. "remaining to charge to 90%". Values above 100 are accepted for inverters that charge past 100% (e.g. 101% for top balancing); the time is then calculated up to that value. |
@@ -164,7 +164,7 @@ grid:
 | `generator_power_entities` | List of entities of the generator power. |
 | `generator_voltage_entities` | List of entities of the generator voltage. This is also used to indicate if there is no grid. |
 | `parallel_average_voltage` | This is used when there are parallel inverters, it will average the voltages when _parallel_ is selected. Otherwise the voltage will not be show when _parallel_ is selected. |
-| `voltage_decimal` | Show the grid (and generator) voltage with 1 decimal (e.g. `231.4 Vac` instead of `231 Vac`). Fork: when `voltage_decimal` isn't set, the voltage follows the entity's display precision in Home Assistant (or the decimals in its state, at most 2); set it to `false` for whole volts. |
+| `voltage_decimal` | Show the grid (and generator) voltage with 1 decimal (e.g. `231.4 Vac` instead of `231 Vac`). Fork: when `voltage_decimal` isn't set, the voltage follows the entity's display precision in Home Assistant (or the decimals in its state, at most 2); set it to `false` for whole volts. In the UI editor this is the three-way choice _display precision_ / _1 decimal_ / _whole volts_. |
 
 ### `consumption`
 
@@ -238,9 +238,14 @@ status_codes:
     overwrite_as_normal: list of numbers # optional
     overwrite_as_warning: list of numbers # optional
     overwrite_as_error: list of numbers # optional
-    show_operating_mode: boolean # optional (fork)
+    code_names: map of code: name # optional (fork)
+    description_entities: list of entities # optional (fork)
     fault_entities: list of entities # optional (fork)
     warning_entities: list of entities # optional (fork)
+    fault_names: map of bit: name # optional (fork)
+    warning_names: map of bit: name # optional (fork)
+    fault_text_entities: list of entities # optional (fork)
+    warning_text_entities: list of entities # optional (fork)
 ```
 
 | Config | Description |
@@ -249,9 +254,16 @@ status_codes:
 | `overwrite_as_normal` | List of codes that will be handled as a normal level regardless of the assigned default. |
 | `overwrite_as_warning` | List of codes that will be handled as a warning level regardless of the assigned default. |
 | `overwrite_as_error` | List of codes that will be handled as a error level regardless of the assigned default. |
-| `show_operating_mode` | Name the operating mode instead of showing "Normal": `PV → Load`, `PV → Battery + Load`, `Battery → Load`, `PV + Battery → Load`, `Grid → Battery`, `PV + Grid → Battery`, and the off-grid modes. "Load" is the inverter's AC output, which feeds the loads first and exports only any surplus. Levels (green/orange/red) are unchanged. |
-| `fault_entities` | Fault code entities (bitmasks), any number. A non-zero code adds a red line such as `Fault E010 (Inv 2) [0x00000400]`: each set bit n is shown as E0nn, with the raw code in hex. With more than one entity the inverter is named from `parallel.aliases`, or `Inv 1`, `Inv 2`, ... |
+| `code_names` | Status code → name, e.g. `17: Standby`. Replaces the card's built-in name for that code, and the text of `description_entities`. The level (colour) still comes from the card's table and the `overwrite_as_*` lists. |
+| `description_entities` | One per inverter (same order as the other lists). The entity's state, as Home Assistant shows it (enum sensors show their translated label), is used as the status name instead of the built-in one. For example EG4 Web Monitor's `…_operating_state` sensor. `code_names` still win. |
+| `fault_entities` | One per inverter: the fault code entity, a bitmask. A non-zero code adds a red line such as `Fault E019 BUS overvoltage`: each set bit n is shown as E0nn, with its name from `fault_names` if one is set. The raw code (hex) is shown when you hover over the line. |
 | `warning_entities` | Same as `fault_entities` for warning codes, shown as orange `W0nn` lines. |
+| `fault_names` / `warning_names` | Bit → name, e.g. `19: BUS overvoltage`. Bits without a name show only their code. |
+| `fault_text_entities` / `warning_text_entities` | One per inverter: an entity whose state is the text of the active faults or warnings (e.g. an integration's "Active Fault (Text)" sensor). Shown as written, unless it reads `OK`, `No Faults`, `No Warnings`, `None`, `Normal`, `0` or is empty. With a bitmask entity too, the text is added after the codes unless `fault_names` / `warning_names` already name them. |
+
+Each inverter's view shows only its own fault and warning lines. The _Parallel_ view shows every inverter's, named after the inverter; when all inverters report exactly the same, it's one line marked `(all)`. Entries beyond `inverter_count` (for example both inverters of a parallel group shown as one with `inverter_count: 1`) belong to no single view, so they're shown in every view, named `Inverter 2`, … or by `parallel.aliases`.
+
+For EG4 / Luxpower inverters, [eg4.md](../eg4.md) has a ready-made set of names to paste.
 
 ### `generator` (fork)
 
@@ -266,8 +278,8 @@ generator:
     power_entities: list of entities # grid only, one per inverter
     voltage_entity: entity # optional (grid with several inverters: voltage_entities)
     voltage_entities: list of entities # grid only, one per inverter
-    frequency_entity: entity # optional, battery only
-    thd_entity: entity # optional, battery only
+    frequency_entity: entity # optional
+    thd_entity: entity # optional
     running_entity: entity # optional, battery only
     active_threshold: number # optional, battery only
     add_to_battery_flow: boolean # optional, battery only
@@ -275,24 +287,26 @@ generator:
 
 | Config | Description |
 |---|---|
-| `architecture` | `battery`: the generator charges the batteries directly on the DC bus (through its own chargers and the BMSs), not through the inverter. It is drawn above the battery with an animated feed into it, and the grid stays visible. `grid`: the generator replaces the grid (upstream's original behaviour, same as `grid.generator_power_entities` / `generator_voltage_entities`). While its power is above 0 and the grid is idle (0 W) or down (0 V), the grid's icon, power and voltage are replaced by the generator's, labelled "Generator", and the grid-down `indicators` are off. |
+| `architecture` | One generator, in one of two wirings. `battery`: the generator charges the batteries directly on the DC bus (through its own chargers and the BMSs), not through the inverter. It is drawn above the battery with an animated feed into it, and the grid stays visible. `grid`: the generator replaces the grid (upstream's original behaviour, same as `grid.generator_power_entities` / `generator_voltage_entities`). While its power is above 0 and the grid is idle (0 W) or down (0 V), the grid's icon, power and voltage are replaced by the generator's, labelled "Generator", and the grid-down `indicators` are off. |
 | `power_entity` | Generator power (W). |
 | `voltage_entity` | Generator voltage (Vac). |
-| `frequency_entity` | Generator frequency (Hz). |
-| `thd_entity` | Generator voltage THD (%). Always shown while the generator is shown, 0% included. |
+| `frequency_entity` | Generator frequency (Hz). One entity, also with `architecture: grid` (it's the generator's own reading). Shown only when set. |
+| `thd_entity` | Generator voltage THD (%). One entity, as `frequency_entity`. With `architecture: battery` it's shown whenever the generator is, 0% included. |
 | `running_entity` | An on/off entity. While `on`, the generator is always shown, with every configured reading (zeros too). While `off` or when not set, it's shown only while power is above `active_threshold`, and zero voltage/frequency are hidden. Either way, the feed into the battery only animates while power is above 0. |
 | `active_threshold` | Watts. Default 0. |
 | `add_to_battery_flow` | Default `true`: generator power is added to the battery flow, so the battery's charge power and runtime show the total from the inverter and the generator. |
 
 With `architecture: battery` the generator belongs to the whole battery bank, so it's shown (and added to the battery flow) in the parallel view or when `inverter_count` is 1.
 
-The older keys still work on their own: `battery_generator:` (the battery options above, without `architecture`) and `grid.generator_power_entities` / `grid.generator_voltage_entities`. Using `generator:` together with them is an error.
+With `architecture: grid` each inverter reports the power (and voltage) it takes from the generator, so `power_entities` and `voltage_entities` have one per inverter; the _Parallel_ view adds up the power and averages the voltage.
+
+The older keys still work on their own: `battery_generator:` (the battery options above, without `architecture`) and `grid.generator_power_entities` / `grid.generator_voltage_entities` (plus `grid.generator_frequency_entity` / `grid.generator_thd_entity`). Using `generator:` together with them is an error. The UI editor's _Generator_ section always saves the `generator:` block, and converts the older keys the first time you change something there.
 
 ### `feed_spacing` (fork)
 
 `feed_spacing: true` shortens the PV → inverter and inverter → home feeds so they don't touch the icons at either end, like the grid feed. Default `false` (upstream's look).
 
-A live example with `architecture: battery`, `feed_spacing: true`, `show_operating_mode: true`:
+A live example with `architecture: battery` and `feed_spacing: true` (the status line uses the names from [eg4.md](../eg4.md)):
 
 <img src="../images/battery-generator-live.png" width="450" />
 

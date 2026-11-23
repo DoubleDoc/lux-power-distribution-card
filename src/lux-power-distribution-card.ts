@@ -3,7 +3,15 @@ import { property, customElement, state } from 'lit/decorators.js';
 
 import { HomeAssistant, LovelaceCard, LovelaceCardEditor } from './lib/types';
 
-import { collectWarnings, isIncomplete, LuxCardConfig, normalizeConfig, RefreshAction, validateConfig } from './config';
+import {
+  CodeNames,
+  collectWarnings,
+  isIncomplete,
+  LuxCardConfig,
+  normalizeConfig,
+  RefreshAction,
+  validateConfig,
+} from './config';
 import {
   CARD_NAME,
   EDITOR_NAME,
@@ -15,7 +23,7 @@ import {
   ARROW_RIGHT,
   ARROW_DOWN,
   getStatusMessage,
-  getOperatingMode,
+  CLEAR_TEXTS,
   statusLevels,
   StatusMessageType,
   CARD_FULL_NAME,
@@ -132,15 +140,16 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     this._incomplete = undefined;
     this._configWarnings = collectWarnings(config);
     // The fork's `generator` block is mapped onto battery_generator / grid.generator_* first.
-    const normalized = normalizeConfig(config);
-    this._entityIds = this.getConfigEntities(normalized);
+    let normalized = config;
     try {
+      normalized = normalizeConfig(config);
       validateConfig(normalized);
     } catch (err) {
       // Not chosen yet (e.g. mid-setup in the UI editor) is not an error; anything else is.
       if (!isIncomplete(err)) throw err;
       this._incomplete = (err as Error).message;
     }
+    this._entityIds = this.getConfigEntities(normalized);
     this._config = normalized;
     this._updated = false;
   }
@@ -559,7 +568,9 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     const walk = (value: unknown, key = '') => {
       if (Array.isArray(value)) value.forEach((item) => walk(item, key));
       else if (value && typeof value === 'object') Object.entries(value).forEach(([k, v]) => walk(v, k));
-      else if (typeof value === 'string' && /_entit(y|ies)$/.test(key) && value.includes('.')) found.push(value);
+      // Fork: depth_of_discharge can be an entity (or one per inverter) too.
+      else if (typeof value === 'string' && /_entit(y|ies)$|^depth_of_discharge$/.test(key) && value.includes('.'))
+        found.push(value);
     };
     walk(config);
     return [...new Set(found)];
@@ -637,8 +648,30 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
   // Status
   //////////////////////////////
 
-  getStatus(code: number) {
-    let status_dict = this._config?.status_codes?.show_operating_mode ? getOperatingMode(code) : getStatusMessage(code);
+  // Name lookup in a code -> name map; YAML keys are numbers, stored (JSON) keys strings.
+  lookupName(names: CodeNames | undefined, code: number): string | undefined {
+    const name = names?.[code] ?? names?.[String(code)];
+    return typeof name === 'string' && name.trim() ? name.trim() : undefined;
+  }
+
+  // Text of an entity as Home Assistant shows it (translated enum labels), or undefined
+  // when it's missing or unavailable.
+  entityText(entity?: string): string | undefined {
+    const stateObj = entity ? this.hass?.states[entity] : undefined;
+    if (!stateObj || ['unknown', 'unavailable', ''].includes(stateObj.state)) return undefined;
+    const formatted = (this.hass as any)?.formatEntityState?.(stateObj);
+    return typeof formatted === 'string' && formatted ? formatted : stateObj.state;
+  }
+
+  // Status for one inverter's code. The colour comes from upstream's table and overwrite_as_*;
+  // the name from (first match) status_codes.code_names, that inverter's description entity,
+  // or upstream's table.
+  getStatus(code: number, index: number = 0) {
+    const status_dict = getStatusMessage(code);
+    const name =
+      this.lookupName(this._config?.status_codes?.code_names, code) ??
+      this.entityText(this._config?.status_codes?.description_entities?.[index]);
+    if (name) status_dict.desc = name;
     if (this._config?.status_codes?.overwrite_as_normal) {
       if (this._config?.status_codes?.overwrite_as_normal.includes(code)) {
         status_dict.level = statusLevels.Clear;
@@ -657,25 +690,83 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     return status_dict;
   }
 
-  // Fault/warning code entities hold bitmasks. Each set bit n is shown as E0nn
-  // (faults) or W0nn (warnings), the Luxpower numbering, with the raw hex code.
+  // Fault and warning lines. Per inverter (same order as the other lists): a bitmask entity,
+  // where set bit n shows as E0nn / W0nn with its name from fault_names / warning_names, and/or a
+  // text entity shown as written. An inverter's view shows its own lines; the Parallel view shows
+  // every inverter's, as one "(all)" line when they're identical. The raw value is the tooltip.
   getCodeAlerts(): TemplateResult[] {
+    const codes = this._config?.status_codes;
+    if (!codes) return [];
+    const count = this._config!.inverter_count;
     const out: TemplateResult[] = [];
-    const scan = (entities: string[] | undefined, prefix: string, dot: string, label: string) => {
-      (entities ?? []).forEach((entity, i) => {
-        const value = parseInt(this.hass?.states[entity]?.state ?? '');
-        if (isNaN(value) || value <= 0) return;
-        const bits: string[] = [];
-        for (let b = 0; b < 32; b++)
-          if (Math.floor(value / 2 ** b) % 2) bits.push(`${prefix}${String(b).padStart(3, '0')}`);
-        const who = entities!.length > 1 ? ` (${this._config?.parallel?.aliases?.[i] ?? `Inv ${i + 1}`})` : '';
-        const hex = `0x${value.toString(16).toUpperCase().padStart(8, '0')}`;
-        out.push(html`<br />${dot} ${label} ${bits.join(', ')}${who} [${hex}]`);
-      });
-    };
-    scan(this._config?.status_codes?.fault_entities, 'E', '🔴', 'Fault');
-    scan(this._config?.status_codes?.warning_entities, 'W', '🟠', 'Warning');
+    const kinds = [
+      {
+        masks: codes.fault_entities,
+        texts: codes.fault_text_entities,
+        names: codes.fault_names,
+        prefix: 'E',
+        dot: '🔴',
+        label: 'Fault',
+      },
+      {
+        masks: codes.warning_entities,
+        texts: codes.warning_text_entities,
+        names: codes.warning_names,
+        prefix: 'W',
+        dot: '🟠',
+        label: 'Warning',
+      },
+    ];
+    for (const kind of kinds) {
+      // The first inverter_count entries belong to the inverters' views. Extra entries (e.g. every
+      // inverter of a parallel group shown as one) belong to no view, so they're shown in all.
+      const length = Math.max(kind.masks?.length ?? 0, kind.texts?.length ?? 0);
+      const own = this._index == -1 ? Array.from({ length: count }, (_, i) => i) : [Math.max(this._index, 0)];
+      const indexes = [
+        ...own.filter((i) => i < Math.max(length, 1)),
+        ...Array.from({ length: Math.max(length - count, 0) }, (_, n) => count + n),
+      ];
+      const lines = indexes.map((i) => this.describeCodes(kind, i));
+      const active = indexes.map((i, n) => ({ i, line: lines[n] })).filter((x) => x.line);
+      if (!active.length) continue;
+      const same =
+        indexes.length > 1 &&
+        active.length == indexes.length &&
+        active.every((x) => x.line!.text == active[0].line!.text);
+      const shown = same ? [{ i: -1, line: active[0].line! }] : active.map((x) => ({ i: x.i, line: x.line! }));
+      for (const { i, line } of shown) {
+        const who = indexes.length > 1 ? (i == -1 ? ' (all)' : ` (${this.getInverterAlias(i)})`) : '';
+        out.push(html`<br /><span title=${line.raw}>${kind.dot} ${kind.label} ${line.text}${who}</span>`);
+      }
+    }
     return out;
+  }
+
+  // One inverter's active faults or warnings, or null when there are none.
+  describeCodes(
+    kind: { masks?: string[]; texts?: string[]; names?: CodeNames; prefix: string },
+    index: number,
+  ): { text: string; raw: string } | null {
+    const mask_entity = kind.masks?.[index];
+    const value = mask_entity ? parseInt(this.hass?.states[mask_entity]?.state ?? '') : NaN;
+    const bits: string[] = [];
+    let named = false;
+    if (!isNaN(value) && value > 0) {
+      for (let b = 0; b < 32; b++) {
+        if (Math.floor(value / 2 ** b) % 2) {
+          const name = this.lookupName(kind.names, b);
+          if (name) named = true;
+          bits.push(`${kind.prefix}${String(b).padStart(3, '0')}${name ? ` ${name}` : ''}`);
+        }
+      }
+    }
+    let text = this.entityText(kind.texts?.[index]);
+    if (text && CLEAR_TEXTS.includes(text.trim().toLowerCase())) text = undefined;
+    if (!bits.length && !text) return null;
+    // Names from the map already say it; otherwise add the text entity's words.
+    const parts = [bits.join(', '), named ? '' : (text ?? '')].filter(Boolean);
+    const raw = !isNaN(value) && value > 0 ? `0x${value.toString(16).toUpperCase().padStart(8, '0')}` : '';
+    return { text: parts.join(': '), raw };
   }
 
   getStatusMessage(status: StatusMessageType) {
@@ -1017,8 +1108,8 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     let status_code = '';
     if (this._config.status_codes?.entities) {
       if (this._index == -1) {
-        const sts_arr: StatusMessageType[] = this._config.status_codes.entities.map((entity) =>
-          this.getStatus(this.getEntityStateInt(entity)),
+        const sts_arr: StatusMessageType[] = this._config.status_codes.entities.map((entity, i) =>
+          this.getStatus(this.getEntityStateInt(entity), i),
         );
         const disct_count = new Set(sts_arr.map((obj) => JSON.stringify(Object.entries(obj).sort()))).size;
         if (disct_count == 1 && sts_arr.length > 0) {
@@ -1033,7 +1124,7 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
         }
       } else {
         const code = this.getEntityStateInt(this._config.status_codes.entities[this._index]);
-        status_code = this.getStatusMessage(this.getStatus(code));
+        status_code = this.getStatusMessage(this.getStatus(code, this._index));
       }
     }
 
@@ -1268,6 +1359,9 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
     // Generator in the grid's place (grid.generator_* / generator architecture: grid):
     // shown while it produces power and the grid is idle (0 W) or down (0 V).
     const gen_in_grid_place = gen_power != null && gen_power > 0 && (grid_flow == 0 || grid_voltage == 0);
+    // Fork: the generator's own frequency and THD (single entities), shown only when configured.
+    const gen_frequency = this.getOptionalFloat(this._config.grid.generator_frequency_entity);
+    const gen_thd = this.getOptionalFloat(this._config.grid.generator_thd_entity);
     if (gen_in_grid_place) {
       grid_arrow = ARROW_LEFT;
     } else if (grid_flow < 0) {
@@ -1304,6 +1398,8 @@ class LuxPowerDistributionCard extends LitElement implements LovelaceCard {
         <p class="header-text">${gen_in_grid_place ? Math.abs(gen_power!) : Math.abs(grid_flow)} W</p>
         ${gen_in_grid_place ? html`<p class="sub-text">Generator</p>` : nothing}
         <p class="header-text">${grid_voltage_str}</p>
+        ${gen_in_grid_place && gen_frequency != null ? html`<p class="sub-text">${gen_frequency.toFixed(1)} Hz</p>` : nothing}
+        ${gen_in_grid_place && gen_thd != null ? html`<p class="sub-text">THD ${gen_thd.toFixed(1)}%</p>` : nothing}
       </div>
     `;
 

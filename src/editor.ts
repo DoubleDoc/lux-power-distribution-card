@@ -55,6 +55,9 @@ export class LuxPowerDistributionCardEditor extends LitElement implements Lovela
   // Which sections are open. Closed ones aren't rendered: with dozens of entity pickers, drawing
   // hidden ones made every change take seconds.
   @state() private _open: Record<string, boolean> = {};
+  // Fork: text typed into the code-name boxes, kept while editing so a half-typed line
+  // (e.g. "17:") isn't wiped by the re-render.
+  @state() private _nameDrafts: Record<string, string> = {};
 
   public setConfig(config: LuxCardConfig): void {
     this._config = config;
@@ -278,6 +281,224 @@ export class LuxPowerDistributionCardEditor extends LitElement implements Lovela
   }
 
   // A dropdown; the first option is the default and is left out of the YAML.
+  // Fork: voltage_decimal unset follows the sensor's display precision; true = 1 decimal,
+  // false = whole volts (upstream's default).
+  private _renderVoltageDecimals(label: string, path: string, value: boolean | undefined): TemplateResult {
+    return this._renderSelect(
+      label,
+      path,
+      value === true ? 'decimal' : value === false ? 'whole' : undefined,
+      [
+        { value: 'precision', label: "The sensor's display precision" },
+        { value: 'decimal', label: '1 decimal' },
+        { value: 'whole', label: 'Whole volts' },
+      ],
+      (selected) => selected === 'decimal',
+    );
+  }
+
+  //////////////////////////////
+  // Fork: generator
+  //////////////////////////////
+
+  // The generator as one object, from the `generator:` block or the older keys.
+  private _generatorOf(config: ConfigObject): ConfigObject {
+    if (config.generator) return { ...config.generator };
+    if (config.battery_generator) return { architecture: 'battery', ...config.battery_generator };
+    const grid = config.grid ?? {};
+    if (
+      grid.generator_power_entities ||
+      grid.generator_voltage_entities ||
+      grid.generator_frequency_entity ||
+      grid.generator_thd_entity
+    )
+      return {
+        architecture: 'grid',
+        power_entities: grid.generator_power_entities,
+        voltage_entities: grid.generator_voltage_entities,
+        frequency_entity: grid.generator_frequency_entity,
+        thd_entity: grid.generator_thd_entity,
+      };
+    return { architecture: 'none' };
+  }
+
+  // Every generator edit goes through here: it always writes the `generator:` block and removes
+  // the older keys, so the two can never be set together.
+  private _generatorChanged(mutate: (gen: ConfigObject) => void): void {
+    this._update((config) => {
+      const gen = this._generatorOf(config);
+      mutate(gen);
+      delete config.battery_generator;
+      if (config.grid) {
+        for (const key of [
+          'generator_power_entities',
+          'generator_voltage_entities',
+          'generator_frequency_entity',
+          'generator_thd_entity',
+        ])
+          delete config.grid[key];
+      }
+      const keep =
+        gen.architecture === 'battery'
+          ? [
+              'architecture',
+              'power_entity',
+              'voltage_entity',
+              'frequency_entity',
+              'thd_entity',
+              'running_entity',
+              'active_threshold',
+              'add_to_battery_flow',
+            ]
+          : ['architecture', 'power_entities', 'voltage_entities', 'frequency_entity', 'thd_entity'];
+      const clean: ConfigObject = {};
+      for (const key of keep) {
+        const value = gen[key];
+        if (value === undefined || value === '' || (Array.isArray(value) && value.every((v) => !v))) continue;
+        clean[key] = value;
+      }
+      if (gen.architecture === 'none') delete config.generator;
+      else config.generator = clean;
+    });
+  }
+
+  private _renderGeneratorEntity(label: string, key: string, gen: ConfigObject): TemplateResult {
+    return this._renderForm([{ name: 'entity', label, selector: { entity: {} } }], { entity: gen[key] }, (value) =>
+      this._generatorChanged((g) => {
+        g[key] = value.entity || undefined;
+      }),
+    );
+  }
+
+  private _renderGeneratorList(label: string, key: string, gen: ConfigObject, count: number): TemplateResult {
+    const list: string[] = gen[key] || [];
+    const schema: FormSchema[] = Array.from({ length: count }, (_, i) => ({
+      name: String(i),
+      label: count > 1 ? `Inverter ${i + 1}` : 'Entity',
+      selector: { entity: {} },
+    }));
+    const data: ConfigObject = {};
+    list.forEach((entity, i) => {
+      if (entity) data[String(i)] = entity;
+    });
+    return html`
+      <div class="entity-group">
+        <div class="entity-label">${label}</div>
+        ${this._renderForm(schema, data, (value) =>
+          this._generatorChanged((g) => {
+            g[key] = Array.from({ length: count }, (_, i) => value[String(i)] || '');
+          }),
+        )}
+      </div>
+    `;
+  }
+
+  private _renderGenerator(config: LuxCardConfig, inverterCount: number): TemplateResult {
+    const gen = this._generatorOf(config as ConfigObject);
+    const architecture = this._renderForm(
+      [
+        {
+          name: 'architecture',
+          label: 'Generator',
+          selector: {
+            select: {
+              mode: 'dropdown',
+              options: [
+                { value: 'none', label: 'None' },
+                { value: 'battery', label: 'Charges the batteries (DC-coupled, drawn above the battery)' },
+                { value: 'grid', label: "Replaces the grid (drawn in the grid's place while it runs)" },
+              ],
+            },
+          },
+        },
+      ],
+      { architecture: gen.architecture },
+      (value) =>
+        this._generatorChanged((g) => {
+          if (value.architecture === g.architecture) return;
+          // Keep what both wirings share; power and voltage are per inverter in grid mode.
+          const { frequency_entity, thd_entity } = g;
+          for (const key of Object.keys(g)) delete g[key];
+          Object.assign(g, { architecture: value.architecture, frequency_entity, thd_entity });
+        }),
+    );
+    if (gen.architecture === 'battery')
+      return html`${architecture}
+      ${this._renderGeneratorEntity('Power (W into the batteries, required)', 'power_entity', gen)}
+      ${this._renderGeneratorEntity('Voltage (optional)', 'voltage_entity', gen)}
+      ${this._renderGeneratorEntity('Frequency (optional)', 'frequency_entity', gen)}
+      ${this._renderGeneratorEntity('Voltage THD (optional)', 'thd_entity', gen)}
+      ${this._renderGeneratorEntity('Running (on/off; shows it even at 0 W, optional)', 'running_entity', gen)}
+      ${this._renderForm(
+        [
+          {
+            name: 'active_threshold',
+            label: 'Show it above (W)',
+            selector: { number: { mode: 'box', min: 0, unit_of_measurement: 'W' } },
+          },
+          {
+            name: 'add_to_battery_flow',
+            label: "Add its power to the battery's charge power and runtime",
+            selector: { boolean: {} },
+          },
+        ],
+        { active_threshold: gen.active_threshold ?? 0, add_to_battery_flow: gen.add_to_battery_flow ?? true },
+        (value) =>
+          this._generatorChanged((g) => {
+            const threshold = Number(value.active_threshold);
+            g.active_threshold = !threshold || Number.isNaN(threshold) ? undefined : threshold;
+            g.add_to_battery_flow = value.add_to_battery_flow === false ? false : undefined;
+          }),
+      )}`;
+    if (gen.architecture === 'grid')
+      return html`${architecture}
+      ${this._renderGeneratorList('Power Entities (what each inverter takes from it, required)', 'power_entities', gen, inverterCount)}
+      ${this._renderGeneratorList('Voltage Entities (optional)', 'voltage_entities', gen, inverterCount)}
+      ${this._renderGeneratorEntity('Frequency (optional)', 'frequency_entity', gen)}
+      ${this._renderGeneratorEntity('Voltage THD (optional)', 'thd_entity', gen)}`;
+    return architecture;
+  }
+
+  //////////////////////////////
+  // Fork: status code names
+  //////////////////////////////
+
+  // "code: name" per line <-> { code: name }. Lines that don't parse stay in the box and are listed.
+  private _renderNames(label: string, path: string, names: Record<string, string> | undefined): TemplateResult {
+    const serialised = Object.entries(names ?? {})
+      .map(([code, name]) => `${code}: ${name}`)
+      .join('\n');
+    // A draft only counts while it still says what the config says; an edit made elsewhere
+    // (e.g. in YAML) replaces it.
+    const parse = (raw: string) => {
+      const parsed: Record<string, string> = {};
+      for (const line of raw.split('\n')) {
+        const match = /^\s*(\d+)\s*[:=]\s*(.+?)\s*$/.exec(line);
+        if (match) parsed[match[1]] = match[2];
+      }
+      return parsed;
+    };
+    const draft = this._nameDrafts[path];
+    const current: Record<string, string> = {};
+    for (const [code, name] of Object.entries(names ?? {})) current[String(code)] = String(name);
+    const text = draft !== undefined && JSON.stringify(parse(draft)) === JSON.stringify(current) ? draft : serialised;
+    const ignored = text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line && !/^\d+\s*[:=]\s*\S/.test(line));
+    return html`${this._renderForm(
+      [{ name: 'value', label, selector: { text: { multiline: true } } }],
+      { value: text },
+      (changed) => {
+        const raw = String(changed.value ?? '');
+        this._nameDrafts = { ...this._nameDrafts, [path]: raw };
+        const parsed = parse(raw);
+        this._setValue(path, Object.keys(parsed).length ? parsed : undefined);
+      },
+    )}
+    ${ignored.length ? html`<div class="note">Ignored (use "code: name"): ${ignored.join(' | ')}</div>` : nothing}`;
+  }
+
   private _renderSelect(
     label: string,
     path: string,
@@ -405,7 +626,8 @@ export class LuxPowerDistributionCardEditor extends LitElement implements Lovela
                 )}
                 ${this._renderSwitch('Show Parallel first in the selector', 'parallel.parallel_first', config.parallel?.parallel_first)}`
               : nothing
-          }`,
+          }
+          ${this._renderSwitch('Leave a gap between the PV/home feeds and their icons', 'feed_spacing', config.feed_spacing)}`,
         )}
         ${this._section(
           'Battery Configuration',
@@ -452,7 +674,7 @@ export class LuxPowerDistributionCardEditor extends LitElement implements Lovela
             inverterCount,
             true,
           )}
-          ${this._renderSwitch('Show battery voltage with 1 decimal', 'battery.voltage_decimal', config.battery?.voltage_decimal)}
+          ${this._renderVoltageDecimals('Battery voltage', 'battery.voltage_decimal', config.battery?.voltage_decimal)}
           ${this._renderSwitch('Invert battery flow direction', 'battery.invert_flow', config.battery?.invert_flow)}
           ${
             inverterCount > 1
@@ -564,32 +786,10 @@ export class LuxPowerDistributionCardEditor extends LitElement implements Lovela
             inverterCount,
             true,
           )}
-          ${this._renderSwitch('Show grid voltage with 1 decimal', 'grid.voltage_decimal', config.grid?.voltage_decimal)}
+          ${this._renderVoltageDecimals('Grid voltage', 'grid.voltage_decimal', config.grid?.voltage_decimal)}
           ${this._renderSwitch('Invert grid flow direction', 'grid.invert_flow', config.grid?.invert_flow)}
           ${this._renderSwitch('Dim the grid icon when there is no grid voltage', 'grid.indicators.hue', config.grid?.indicators?.hue)}
           ${this._renderSwitch('Show a red dot when there is no grid voltage', 'grid.indicators.dot', config.grid?.indicators?.dot)}
-          ${this._advanced(
-            'grid-generator',
-            'Generator (experimental)',
-            html`<div class="note">
-                Generator support is still limited: with no grid, the card may show the generator at 0 W / 0 V (issue
-                #66).
-              </div>
-              ${this._renderEntityPickers(
-                'Generator Power Entities',
-                'grid.generator_power_entities',
-                config.grid?.generator_power_entities,
-                inverterCount,
-                true,
-              )}
-              ${this._renderEntityPickers(
-                'Generator Voltage Entities',
-                'grid.generator_voltage_entities',
-                config.grid?.generator_voltage_entities,
-                inverterCount,
-                true,
-              )}`,
-          )}
           ${
             multi
               ? this._advanced(
@@ -605,6 +805,7 @@ export class LuxPowerDistributionCardEditor extends LitElement implements Lovela
               : nothing
           }`,
         )}
+        ${this._section('Generator (optional)', this._renderGenerator(config, inverterCount), false)}
         ${this._section(
           'Consumption Configuration',
           html`${this._renderEntityPickers(
@@ -761,10 +962,45 @@ export class LuxPowerDistributionCardEditor extends LitElement implements Lovela
             config.update_time?.has_timestamp_attribute,
           )}
           ${this._renderEntityPickers('Status Code Entities', 'status_codes.entities', config.status_codes?.entities, inverterCount, true)}
+          ${this._renderEntityPickers(
+            'Status Description Entities (text shown instead of the built-in name, optional)',
+            'status_codes.description_entities',
+            config.status_codes?.description_entities,
+            inverterCount,
+            true,
+          )}
+          ${this._renderEntityPickers('Fault Code Entities (bitmask)', 'status_codes.fault_entities', config.status_codes?.fault_entities, inverterCount, true)}
+          ${this._renderEntityPickers(
+            'Fault Text Entities (optional)',
+            'status_codes.fault_text_entities',
+            config.status_codes?.fault_text_entities,
+            inverterCount,
+            true,
+          )}
+          ${this._renderEntityPickers(
+            'Warning Code Entities (bitmask)',
+            'status_codes.warning_entities',
+            config.status_codes?.warning_entities,
+            inverterCount,
+            true,
+          )}
+          ${this._renderEntityPickers(
+            'Warning Text Entities (optional)',
+            'status_codes.warning_text_entities',
+            config.status_codes?.warning_text_entities,
+            inverterCount,
+            true,
+          )}
           ${this._advanced(
             'status-colours',
-            'Status code colours',
-            html`<div class="note">Codes, separated by commas, to show as normal, warning or error.</div>
+            'Status code names and colours',
+            html`<div class="note">
+                One "code: name" per line. These names win over the built-in ones and the description entities.
+              </div>
+              ${this._renderNames('Status code names', 'status_codes.code_names', config.status_codes?.code_names)}
+              ${this._renderNames('Fault names (bit: name)', 'status_codes.fault_names', config.status_codes?.fault_names)}
+              ${this._renderNames('Warning names (bit: name)', 'status_codes.warning_names', config.status_codes?.warning_names)}
+              <div class="note">Codes, separated by commas, to show as normal, warning or error.</div>
               ${this._renderCodes('Show as normal', 'status_codes.overwrite_as_normal', config.status_codes?.overwrite_as_normal)}
               ${this._renderCodes('Show as warning', 'status_codes.overwrite_as_warning', config.status_codes?.overwrite_as_warning)}
               ${this._renderCodes('Show as error', 'status_codes.overwrite_as_error', config.status_codes?.overwrite_as_error)}`,

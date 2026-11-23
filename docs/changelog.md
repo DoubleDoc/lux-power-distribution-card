@@ -7,7 +7,9 @@ Features
 - `generator` block with `architecture: battery` (a DC-coupled generator drawn above the battery, with the grid still shown) or `architecture: grid` (the generator in the grid's place, upstream's `grid.generator_*`).
 - Battery generator: shows power, voltage, frequency and THD; appears while its power is above `active_threshold` or while `running_entity` is on; its power is added to the battery flow (`add_to_battery_flow`); its feed into the battery animates only while its power is above 0.
 - Generator in the grid's place: while the generator runs and the grid is idle (0 W) or down (0 V), the grid slot shows the generator icon at 80%, its power labelled "Generator" and its voltage, without the grid-down indicators.
-- `status_codes`: `show_operating_mode`, `fault_entities`, `warning_entities`.
+- `status_codes`: `code_names`, `fault_names`, `warning_names` (names that win over the built-in ones), `description_entities`, and per-inverter `fault_entities` / `warning_entities` (bitmasks) and `fault_text_entities` / `warning_text_entities`. Each inverter's view shows its own faults and warnings; identical ones show once as "(all)" in the Parallel view. Names for EG4 / Luxpower are in `docs/eg4.md`.
+- Generator in the grid's place: optional `frequency_entity` / `thd_entity` (one each).
+- UI editor: Generator section with the wiring choice (writes the `generator:` block), status/fault/warning entities and names, voltage display choice (display precision / 1 decimal / whole volts), `feed_spacing`.
 - `battery.depth_of_discharge` also accepts an entity or a list of entities (one per inverter).
 - Voltages follow each entity's display precision in Home Assistant when `voltage_decimal` isn't set (`voltage_decimal: true` or `false` work as upstream); the runtime estimate uses the full voltage.
 - `feed_spacing` option.

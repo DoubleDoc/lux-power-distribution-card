@@ -43,7 +43,10 @@ export type BatteryGeneratorConfig = {
 // older options, which keep working on their own:
 //   architecture: battery -> battery_generator (DC-coupled, drawn above the battery)
 //   architecture: grid    -> grid.generator_power_entities / generator_voltage_entities
+//                            (+ generator_frequency_entity / generator_thd_entity)
 //                            (generator replaces the grid, the original behaviour)
+// One generator: in grid mode each inverter reports the power (and voltage) it takes from it,
+// while frequency and THD are the generator's own, so they're single entities.
 export type GeneratorConfig = Partial<BatteryGeneratorConfig> & {
   architecture: 'battery' | 'grid';
   power_entities?: string[]; // grid: one per inverter (or use power_entity with one inverter)
@@ -80,6 +83,8 @@ export type GridConfig = {
   indicators?: GridHueConfig;
   generator_power_entities?: string[];
   generator_voltage_entities?: string[];
+  generator_frequency_entity?: string; // fork: the generator's frequency (Hz), shown while it replaces the grid
+  generator_thd_entity?: string; // fork: the generator's voltage THD (%), shown while it replaces the grid
   parallel_average_voltage?: boolean;
   voltage_decimal?: boolean; // show grid and generator voltage with 1 decimal
 };
@@ -111,10 +116,19 @@ export type StatusCodesConfig = {
   overwrite_as_normal?: number[];
   overwrite_as_warning?: number[];
   overwrite_as_error?: number[];
-  show_operating_mode?: boolean; // name the operating mode (e.g. "PV → Battery + AC") instead of "Normal"
-  fault_entities?: string[]; // fault code (bitmask) entities, any number; non-zero shows as a fault
-  warning_entities?: string[]; // warning code (bitmask) entities, any number; non-zero shows as a warning
+  // Fork options. Names entered here win over every built-in name and over description_entities.
+  code_names?: CodeNames; // status code -> name
+  description_entities?: string[]; // one per inverter: its state (as HA shows it) names the status
+  fault_entities?: string[]; // one per inverter: fault code bitmask; set bit n shows as E0nn
+  warning_entities?: string[]; // one per inverter: warning code bitmask; set bit n shows as W0nn
+  fault_names?: CodeNames; // fault bit -> name
+  warning_names?: CodeNames; // warning bit -> name
+  fault_text_entities?: string[]; // one per inverter: text of the active faults (e.g. "No Faults" when clear)
+  warning_text_entities?: string[]; // one per inverter: text of the active warnings
 };
+
+// Code -> name. YAML gives number keys; JSON (stored dashboards) gives strings, so both are read.
+export type CodeNames = Record<string, string>;
 
 export type TempConfig = {
   entities?: string[];
@@ -140,16 +154,22 @@ export type LuxCardConfig = LovelaceCardConfig & {
 export function normalizeConfig(config: LuxCardConfig): LuxCardConfig {
   const gen = config.generator;
   if (!gen) return config;
-  if (config.battery_generator || config.grid?.generator_power_entities || config.grid?.generator_voltage_entities)
+  if (
+    config.battery_generator ||
+    config.grid?.generator_power_entities ||
+    config.grid?.generator_voltage_entities ||
+    config.grid?.generator_frequency_entity ||
+    config.grid?.generator_thd_entity
+  )
     throw new Error(`Use either 'generator' or the older 'battery_generator' / 'grid.generator_*' options, not both.`);
   const { architecture, power_entities, voltage_entities, ...rest } = gen;
   if (architecture === 'battery') {
-    if (!rest.power_entity) throw new Error(`'power_entity' is required within 'generator'.`);
+    if (!rest.power_entity) throw incomplete('generator.power_entity', 1, 1);
     return { ...config, battery_generator: rest as BatteryGeneratorConfig };
   }
   if (architecture === 'grid') {
     const powers = power_entities ?? (rest.power_entity ? [rest.power_entity] : undefined);
-    if (!powers) throw new Error(`'power_entities' (or 'power_entity') is required within 'generator'.`);
+    if (!powers) throw incomplete('generator.power_entities', 1, config.inverter_count);
     validateEntityCount(powers, 'generator.power_entities', config.inverter_count);
     const volts = voltage_entities ?? (rest.voltage_entity ? [rest.voltage_entity] : undefined);
     if (volts) validateEntityCount(volts, 'generator.voltage_entities', config.inverter_count);
@@ -159,6 +179,8 @@ export function normalizeConfig(config: LuxCardConfig): LuxCardConfig {
         ...config.grid,
         generator_power_entities: powers,
         ...(volts ? { generator_voltage_entities: volts } : {}),
+        ...(rest.frequency_entity ? { generator_frequency_entity: rest.frequency_entity } : {}),
+        ...(rest.thd_entity ? { generator_thd_entity: rest.thd_entity } : {}),
       },
     };
   }
@@ -183,6 +205,8 @@ const ENTITY_NAMES: Record<string, string> = {
   'battery.discharge_live_entities': 'battery discharge',
   'consumption.home_entities': 'home consumption',
   'grid.flow_entities': 'grid flow',
+  'generator.power_entity': 'generator power',
+  'generator.power_entities': 'generator power',
 };
 
 function incomplete(object_name: string, inverter: number, inv_count: number): IncompleteConfigError {
@@ -334,6 +358,8 @@ const KNOWN_OPTIONS: Record<string, string[]> = {
     'indicators',
     'generator_power_entities',
     'generator_voltage_entities',
+    'generator_frequency_entity',
+    'generator_thd_entity',
     'parallel_average_voltage',
     'voltage_decimal',
   ],
@@ -348,9 +374,14 @@ const KNOWN_OPTIONS: Record<string, string[]> = {
     'overwrite_as_warning',
     'overwrite_as_error',
     // Fork options
-    'show_operating_mode',
+    'code_names',
+    'description_entities',
     'fault_entities',
     'warning_entities',
+    'fault_names',
+    'warning_names',
+    'fault_text_entities',
+    'warning_text_entities',
   ],
   // Fork options
   generator: [
@@ -400,6 +431,7 @@ const PER_INVERTER_LISTS = [
   'temp.entities',
   'update_time.entities',
   'status_codes.entities',
+  'status_codes.description_entities',
   'parallel.aliases',
   'refresh.lux_dongles',
 ];
@@ -486,6 +518,18 @@ export function collectWarnings(config: LuxCardConfig): string[] {
     const codes = config.status_codes?.[key];
     if (codes !== undefined && !(Array.isArray(codes) && codes.every((code) => typeof code === 'number')))
       warnings.push(`'status_codes.${key}' should be a list of numbers (status codes).`);
+  }
+  // Fork: code -> name maps. Keys must be whole numbers (YAML numbers or stored strings).
+  for (const key of ['code_names', 'fault_names', 'warning_names'] as const) {
+    const names = config.status_codes?.[key];
+    if (names === undefined) continue;
+    if (!names || typeof names !== 'object' || Array.isArray(names)) {
+      warnings.push(`'status_codes.${key}' should be a list of 'code: name' entries.`);
+      continue;
+    }
+    const bad = Object.keys(names).filter((code) => !/^\d+$/.test(code.trim()));
+    if (bad.length)
+      warnings.push(`'status_codes.${key}' entries need a whole-number code; ignored: ${bad.join(', ')}.`);
   }
   return warnings;
 }

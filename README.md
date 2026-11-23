@@ -18,8 +18,9 @@ A simple power distribution card of an inverter and battery system, for [Home As
 Built on upstream **v2.1.0** (UI editor, shared battery, `battery.charge_target_soc`, `refresh.action`, and more; see the [changelog](/docs/changelog.md)). All fork additions are optional; a config without them renders exactly like upstream. Details are in the [config](/docs/config/config.md) document.
 
 - **`generator`** with `architecture: battery` draws a generator that charges the batteries directly on the DC bus (through its own chargers and the BMSs, not the inverter). It sits above the battery with an animated feed and appears only while running (power above a threshold, or forced on by a `running_entity`). It shows power plus optional voltage, frequency and THD, and its power is added to the battery flow. The grid stays visible. The feed only animates while the generator delivers power.
-- **Generator in the grid's place** (`architecture: grid`, or upstream's `grid.generator_*`): while the generator runs and the grid is idle or down, the grid slot shows the generator's icon, power and voltage.
-- **`status_codes.show_operating_mode`** names the operating mode (e.g. `PV → Battery + Load`) instead of "Normal"; **`fault_entities`** / **`warning_entities`** show non-zero fault and warning codes as red/orange lines.
+- **Generator in the grid's place** (`architecture: grid`, or upstream's `grid.generator_*`): while the generator runs and the grid is idle or down, the grid slot shows the generator's icon, power and voltage, plus its frequency and THD when those entities are set.
+- **UI editor:** a _Generator_ section (choose the wiring, then its entities), the status, fault and warning options with their names, a three-way voltage choice and `feed_spacing`.
+- **Status, fault and warning names:** `status_codes.code_names`, `fault_names` and `warning_names` name any code, and win over the built-in names. `description_entities` take the status name from an entity (e.g. an integration's operating-mode sensor). **`fault_entities`** / **`warning_entities`** (one per inverter, bitmasks) show active faults and warnings as red/orange lines such as `Fault E019 BUS overvoltage`, and `fault_text_entities` / `warning_text_entities` show an integration's own fault text. For EG4 / Luxpower, [eg4.md](/docs/eg4.md) has a set of names to paste.
 - **`battery.depth_of_discharge`** also accepts an entity (e.g. the inverter's cut-off SOC setting) or one per inverter.
 - **Voltages follow each entity's display precision** in Home Assistant when `voltage_decimal` isn't set, for example `52.50 Vdc` for a sensor shown with 2 decimals. `voltage_decimal: true` (1 decimal) or `false` (whole volts) work as upstream. The runtime estimate uses the full voltage.
 - **`feed_spacing: true`** leaves a gap between the PV/home feeds and their icons.
@@ -73,6 +74,8 @@ The card doesn't need any particular integration. Every value is an entity you c
 
 ### Example with EG4 Web Monitor
 
+For names of the operating modes, faults and warnings, see [eg4.md](/docs/eg4.md): it has a block to paste into `status_codes`.
+
 This is the config used on a parallel group of two EG4 18kPV inverters, with the master's serial replaced by `1234567890`. Entity names depend on your model, serials and parallel group, so check yours under **Settings → Devices & services**.
 
 ```yaml
@@ -113,7 +116,11 @@ temp:
 status_codes:
   entities:
     - sensor.18kpv_1234567890_status_code
-  show_operating_mode: true
+  fault_entities:
+    - sensor.18kpv_1234567890_fault_code
+  warning_entities:
+    - sensor.18kpv_1234567890_warning_code
+  # Add the code_names, fault_names and warning_names from docs/eg4.md here.
 update_time:
   entities:
     - sensor.eg4_last_update_display
